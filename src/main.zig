@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const cli = @import("./cli.zig");
+const nix = @import("./nix.zig");
 
 // const kirikae = @import("kirikae");
 
@@ -13,7 +14,7 @@ pub fn main(init: std.process.Init) !void {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
     var iter = std.process.Args.Iterator.init(init.minimal.args);
-    _ = iter.next(); // skip program name
+    _ = iter.next();
     while (iter.next()) |arg| try argv.append(allocator, arg);
 
     const args = cli.parseArgs(allocator, argv.items) catch |err| {
@@ -21,12 +22,15 @@ pub fn main(init: std.process.Init) !void {
         return err;
     };
 
+    const json = try nix.evalJson(allocator, init.io, args.flake, "kirikae");
+    defer allocator.free(json);
+
     switch (args.subcommand orelse {
         cli.printUsage();
         return;
     }) {
         .build => std.debug.print("build: not yet implemented\n", .{}),
         .apply => std.debug.print("apply: not yet implemented\n", .{}),
-        .eval  => std.debug.print("eval: not yet implemented\n", .{}),
+        .eval  => std.debug.print("{s}\n", .{json}),
     }
 }
