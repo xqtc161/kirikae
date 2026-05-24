@@ -1,0 +1,24 @@
+image: nixos/nix
+
+variables:
+  NIX_CONFIG: "experimental-features = nix-command flakes"
+
+stages:
+  - build
+  - test
+
+.zig: &zig
+  before_script:
+    - nix profile install nixpkgs#zig_0_16
+
+build:
+  <<: *zig
+  stage: build
+  script:
+    - zig build
+
+test:
+  <<: *zig
+  stage: test
+  script:
+    - zig build test
