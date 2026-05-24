@@ -25,10 +25,17 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8) !std.json
     });
 }
 
-/// Returns true if `host_name` matches `filter`.
-/// `filter` is a comma-separated list of patterns; `*` is the only wildcard.
-/// A null filter matches everything.
-pub fn matchesFilter(host_name: []const u8, filter: ?[]const u8) bool {
+/// Returns true if `host_name` should be included given `filter` and `exclude`.
+/// Both are comma-separated glob pattern lists; `*` is the only wildcard.
+/// A null `filter` matches all hosts. A null `exclude` excludes none.
+/// `exclude` takes precedence: a host matching both is excluded.
+pub fn matchesFilter(host_name: []const u8, filter: ?[]const u8, exclude: ?[]const u8) bool {
+    if (exclude) |ex| {
+        var it = std.mem.splitScalar(u8, ex, ',');
+        while (it.next()) |pattern| {
+            if (globMatch(std.mem.trim(u8, pattern, " "), host_name)) return false;
+        }
+    }
     const f = filter orelse return true;
     var it = std.mem.splitScalar(u8, f, ',');
     while (it.next()) |pattern| {
@@ -53,14 +60,20 @@ fn globMatch(pattern: []const u8, str: []const u8) bool {
     return false;
 }
 
+
 test "matchesFilter" {
-    try std.testing.expect(matchesFilter("webserver", null));
-    try std.testing.expect(matchesFilter("webserver", "webserver"));
-    try std.testing.expect(!matchesFilter("webserver", "database"));
-    try std.testing.expect(matchesFilter("webserver", "web*"));
-    try std.testing.expect(matchesFilter("webserver", "*server"));
-    try std.testing.expect(matchesFilter("webserver", "*"));
-    try std.testing.expect(matchesFilter("database", "webserver,database"));
-    try std.testing.expect(!matchesFilter("bastion", "webserver,database"));
-    try std.testing.expect(matchesFilter("web-01", "web-*,db-*"));
+    try std.testing.expect(matchesFilter("webserver", null, null));
+    try std.testing.expect(matchesFilter("webserver", "webserver", null));
+    try std.testing.expect(!matchesFilter("webserver", "database", null));
+    try std.testing.expect(matchesFilter("webserver", "web*", null));
+    try std.testing.expect(matchesFilter("webserver", "*server", null));
+    try std.testing.expect(matchesFilter("webserver", "*", null));
+    try std.testing.expect(matchesFilter("database", "webserver,database", null));
+    try std.testing.expect(!matchesFilter("bastion", "webserver,database", null));
+    try std.testing.expect(matchesFilter("web-01", "web-*,db-*", null));
+    // exclude takes precedence
+    try std.testing.expect(!matchesFilter("webserver", null, "webserver"));
+    try std.testing.expect(!matchesFilter("webserver", "*", "web*"));
+    try std.testing.expect(matchesFilter("database", "*", "web*"));
+    try std.testing.expect(!matchesFilter("web-01", "web-*", "web-01"));
 }

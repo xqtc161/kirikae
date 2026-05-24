@@ -3,6 +3,7 @@ const std = @import("std");
 pub const GlobalArgs = struct {
     flake: []const u8 = ".",
     filter: ?[]const u8,
+    exclude: ?[]const u8,
     subcommand: ?Subcommand,
 };
 
@@ -14,7 +15,7 @@ pub const Subcommand = enum {
 
 pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !GlobalArgs {
     _ = allocator;
-    var result = GlobalArgs{ .filter = null, .subcommand = null };
+    var result = GlobalArgs{ .filter = null, .exclude = null, .subcommand = null };
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
@@ -29,6 +30,10 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
             i += 1;
             if (i >= args.len) return error.MissingValue;
             result.filter = args[i];
+        } else if (std.mem.eql(u8, arg, "--not-on")) {
+            i += 1;
+            if (i >= args.len) return error.MissingValue;
+            result.exclude = args[i];
         } else if (arg.len > 0 and arg[0] != '-') {
             if (result.subcommand != null) return error.UnexpectedArgument;
             const sub = std.meta.stringToEnum(Subcommand, arg) orelse {
@@ -44,9 +49,10 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
     return result;
 }
 
+
 pub fn printUsage() void {
     std.debug.print(
-        \\Usage: kirikae [-f <flake>] [--on <nodes>] <subcommand>
+        \\Usage: kirikae [-f <flake>] [--on <nodes>] [--not-on <nodes>] <subcommand>
         \\
         \\Subcommands:
         \\  build   Build system closures
@@ -56,6 +62,7 @@ pub fn printUsage() void {
         \\Options:
         \\  -f, --flake <FLAKE>   Flake to deploy (default: ".")
         \\  --on <NODES>          Comma-separated host filter
+        \\  --not-on <NODES>      Comma-separated host exclusion filter
         \\  -h, --help            Show this help
         \\
     , .{});
