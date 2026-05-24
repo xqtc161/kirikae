@@ -4,6 +4,7 @@ const Io = std.Io;
 const cli = @import("./cli.zig");
 const config = @import("./config.zig");
 const nix = @import("./nix.zig");
+const ssh = @import("./ssh.zig");
 
 // const kirikae = @import("kirikae");
 
@@ -44,7 +45,28 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("{s}\n", .{std.mem.trimEnd(u8, path, "\n")});
             }
         },
-        .apply => std.debug.print("apply: not yet implemented\n", .{}),
+        .apply => {
+            var it = cfg.value.hosts.map.iterator();
+            while (it.next()) |entry| {
+                const hostname = entry.key_ptr.*;
+                const host = entry.value_ptr.*;
+                if (!config.matchesFilter(hostname, args.filter)) continue;
+
+                std.debug.print("[{s}] building... ", .{hostname});
+                const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch continue;
+                defer allocator.free(path);
+                const store_path = std.mem.trimEnd(u8, path, "\n");
+                std.debug.print("{s}\n", .{store_path});
+
+                std.debug.print("[{s}] copying... ", .{hostname});
+                nix.copyToHost(allocator, init.io, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
+                std.debug.print("done\n", .{});
+
+                std.debug.print("[{s}] activating... ", .{hostname});
+                ssh.activate(allocator, init.io, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
+                std.debug.print("done\n", .{});
+            }
+        },
         .eval => {
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
