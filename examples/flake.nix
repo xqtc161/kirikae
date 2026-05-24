@@ -1,28 +1,47 @@
 {
   description = "Example kirikae deployment";
 
-  inputs = { };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   outputs =
-    { self }:
+    { self, nixpkgs }:
     {
-      kirikae = {
-        hosts = {
-          proxy = {
-            targetHost = "10.0.0.1";
-            targetUser = "root";
-            targetPort = 22;
-          };
-          database = {
-            targetHost = "10.0.0.2";
-            targetUser = "deploy";
-            targetPort = 22;
-          };
-          vpn = {
-            targetHost = "203.0.113.5";
-            targetUser = "root";
-            targetPort = 2222;
-          };
+      # Each nixosConfigurations key must match the corresponding kirikae.hosts key.
+      # kirikae derives which NixOS config to build/deploy from the host key directly.
+      nixosConfigurations = {
+        proxy = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./hosts/proxy.nix ];
+        };
+        database = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./hosts/database.nix ];
+        };
+        vpn = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./hosts/vpn.nix ];
+        };
+      };
+
+      # optional
+      # expose systems as hydra jobs for pre-building.
+      hydraJobs = builtins.mapAttrs (_: cfg: cfg.config.system.build.toplevel) self.nixosConfigurations;
+
+      kirikae.hosts = {
+        proxy = {
+          targetHost = "10.0.0.1";
+          targetUser = "root";
+          targetPort = 22;
+        };
+        database = {
+          targetHost = "10.0.0.2";
+          targetUser = "deploy";
+          targetPort = 22;
+        };
+        vpn = {
+          targetHost = "203.0.113.5";
+          targetUser = "root";
+          targetPort = 2222;
         };
       };
     };

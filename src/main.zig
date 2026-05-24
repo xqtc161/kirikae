@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const cli = @import("./cli.zig");
+const config = @import("./config.zig");
 const nix = @import("./nix.zig");
 
 // const kirikae = @import("kirikae");
@@ -22,15 +23,37 @@ pub fn main(init: std.process.Init) !void {
         return err;
     };
 
-    const json = try nix.evalJson(allocator, init.io, args.flake, "kirikae");
-    defer allocator.free(json);
+    const cfg = try config.load(allocator, init.io, args.flake);
+    defer cfg.deinit();
 
     switch (args.subcommand orelse {
         cli.printUsage();
         return;
     }) {
-        .build => std.debug.print("build: not yet implemented\n", .{}),
+        .build => {
+            var it = cfg.value.hosts.map.iterator();
+            while (it.next()) |entry| {
+                const hostname = entry.key_ptr.*;
+                if (!config.matchesFilter(hostname, args.filter)) continue;
+                std.debug.print("building {s}... ", .{hostname});
+                const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch {
+                    // error already printed by buildSystem
+                    continue;
+                };
+                defer allocator.free(path);
+                std.debug.print("{s}\n", .{std.mem.trimEnd(u8, path, "\n")});
+            }
+        },
         .apply => std.debug.print("apply: not yet implemented\n", .{}),
-        .eval  => std.debug.print("{s}\n", .{json}),
+        .eval => {
+            var it = cfg.value.hosts.map.iterator();
+            while (it.next()) |entry| {
+                if (!config.matchesFilter(entry.key_ptr.*, args.filter)) continue;
+                const h = entry.value_ptr.*;
+                std.debug.print("{s}: {s}@{s}:{d}\n", .{
+                    entry.key_ptr.*, h.targetUser, h.targetHost, h.targetPort,
+                });
+            }
+        },
     }
 }
