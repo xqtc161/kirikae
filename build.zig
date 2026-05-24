@@ -50,6 +50,20 @@ pub fn build(b: *std.Build) void {
     // test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    const docs_obj = b.addObject(.{
+        .name = "kirikae",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .target = b.resolveTargetQuery(.{}),
+        }),
+    });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs_obj.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    b.step("docs", "Generate documentation").dependOn(&install_docs.step);
+
     const release_exe = b.addExecutable(.{
         .name = "kirikae",
         .root_module = b.createModule(.{

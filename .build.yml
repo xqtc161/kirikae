@@ -1,0 +1,26 @@
+image: nixos/latest
+
+oauth: pages.sr.ht/PAGES:RW
+
+sources:
+  - https://git.sr.ht/~xqtc/kirikae
+
+environment:
+  NIX_CONFIG: experimental-features = nix-command flakes
+  site: xqtc.srht.site
+
+tasks:
+  - setup: |
+      nix profile install nixpkgs#hut
+
+  - build-docs: |
+      cd kirikae
+      nix run .#docs
+
+  - package: |
+      mkdir -p site/kirikae
+      cp -r kirikae/zig-out/docs/. site/kirikae/
+      tar -czf site.tar.gz -C site .
+
+  - upload: |
+      hut pages publish -d $site site.tar.gz
