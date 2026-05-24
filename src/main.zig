@@ -24,13 +24,15 @@ pub fn main(init: std.process.Init) !void {
         return err;
     };
 
+    const subcommand = args.subcommand orelse {
+        cli.printUsage();
+        return;
+    };
+
     const cfg = try config.load(allocator, init.io, args.flake);
     defer cfg.deinit();
 
-    switch (args.subcommand orelse {
-        cli.printUsage();
-        return;
-    }) {
+    switch (subcommand) {
         .build => {
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
