@@ -27,6 +27,47 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
     return result.stdout;
 }
 
+/// Copies a store path to a remote host via `nix copy`.
+/// Port is passed via NIX_SSHOPTS rather than embedded in the URL, because
+/// nix does not parse the port from ssh:// URIs, it passes the host string
+/// verbatim to SSH, which rejects "host:port" as a hostname.
+pub fn copyToHost(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    parent_env: *const std.process.Environ.Map,
+    store_path: []const u8,
+    target_user: []const u8,
+    target_host: []const u8,
+    target_port: u16,
+) !void {
+    const target = try std.fmt.allocPrint(gpa, "ssh://{s}@{s}", .{ target_user, target_host });
+    defer gpa.free(target);
+
+    var env = try parent_env.clone(gpa);
+    defer env.deinit();
+    const ssh_opts = try std.fmt.allocPrint(gpa, "-p {d}", .{target_port});
+    defer gpa.free(ssh_opts);
+    try env.put("NIX_SSHOPTS", ssh_opts);
+
+    const result = try std.process.run(gpa, io, .{
+        .argv = &.{ "nix", "copy", "--to", target, "--substitute-on-destination", store_path },
+        .environ_map = &env,
+    });
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+
+    switch (result.term) {
+        .exited => |code| if (code != 0) {
+            std.debug.print("nix copy failed:\n{s}\n", .{result.stderr});
+            return error.NixFailed;
+        },
+        else => {
+            std.debug.print("nix copy terminated unexpectedly\n", .{});
+            return error.NixFailed;
+        },
+    }
+}
+
 /// Runs `nix build <flake>#nixosConfigurations.<hostname>.config.system.build.toplevel`
 /// and returns the resulting store path
 /// Caller owns the returned slice and must free it with `gpa`.

@@ -13,6 +13,10 @@
           system = "x86_64-linux";
           modules = [ ./hosts/proxy.nix ];
         };
+        vm-proxy = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [ ./hosts/vm-proxy.nix ];
+        };
         database = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [ ./hosts/database.nix ];
@@ -28,6 +32,11 @@
       hydraJobs = builtins.mapAttrs (_: cfg: cfg.config.system.build.toplevel) self.nixosConfigurations;
 
       kirikae.hosts = {
+        vm-proxy = {
+          targetHost = "127.0.0.1";
+          targetUser = "root";
+          targetPort = 2222;
+        };
         proxy = {
           targetHost = "10.0.0.1";
           targetUser = "root";
