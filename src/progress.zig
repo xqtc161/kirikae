@@ -1,4 +1,5 @@
 const std = @import("std");
+const ansi = @import("./ansi.zig");
 
 const MAX_MSGS = 5;
 const MSG_WIDTH = 100;
@@ -35,7 +36,10 @@ pub const Display = struct {
                 std.debug.print("\x1b[2K\n", .{});
             }
         }
-        std.debug.print("\x1b[2K[{d}/{d}/{d}] building...", .{ done, running, expected });
+        std.debug.print(
+            "\x1b[2K[" ++ ansi.green ++ "{d}" ++ ansi.reset ++ "/" ++ ansi.yellow ++ "{d}" ++ ansi.reset ++ "/" ++ ansi.dim ++ "{d}" ++ ansi.reset ++ "] building...",
+            .{ done, running, expected },
+        );
         self.rendered = true;
     }
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const ansi = @import("./ansi.zig");
 const progress = @import("./progress.zig");
 
 /// Runs `nix eval <flake_ref>#<attr> --json` and returns the captured stdout.
@@ -16,11 +17,11 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print("nix eval failed:\n{s}\n", .{result.stderr});
+            std.debug.print(ansi.red ++ "nix eval failed:" ++ ansi.reset ++ "\n{s}\n", .{result.stderr});
             return error.NixFailed;
         },
         else => {
-            std.debug.print("nix eval terminated unexpectedly\n", .{});
+            std.debug.print(ansi.red ++ "nix eval terminated unexpectedly" ++ ansi.reset ++ "\n", .{});
             return error.NixFailed;
         },
     }
@@ -59,11 +60,11 @@ pub fn copyToHost(
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print("nix copy failed:\n{s}\n", .{result.stderr});
+            std.debug.print(ansi.red ++ "nix copy failed:" ++ ansi.reset ++ "\n{s}\n", .{result.stderr});
             return error.NixFailed;
         },
         else => {
-            std.debug.print("nix copy terminated unexpectedly\n", .{});
+            std.debug.print(ansi.red ++ "nix copy terminated unexpectedly" ++ ansi.reset ++ "\n", .{});
             return error.NixFailed;
         },
     }
@@ -199,11 +200,11 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     const term = try child.wait(io);
     switch (term) {
         .exited => |code| if (code != 0) {
-            std.debug.print("nix build failed for '{s}':\n{s}\n", .{ hostname, stderr_log.items });
+            std.debug.print(ansi.red ++ "nix build failed" ++ ansi.reset ++ " for '{s}':\n{s}\n", .{ hostname, stderr_log.items });
             return error.NixFailed;
         },
         else => {
-            std.debug.print("nix build terminated unexpectedly for '{s}'\n", .{hostname});
+            std.debug.print(ansi.red ++ "nix build terminated unexpectedly" ++ ansi.reset ++ " for '{s}'\n", .{hostname});
             return error.NixFailed;
         },
     }

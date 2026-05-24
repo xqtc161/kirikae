@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 
+const ansi = @import("./ansi.zig");
 const cli = @import("./cli.zig");
 const config = @import("./config.zig");
 const nix = @import("./nix.zig");
@@ -36,13 +37,13 @@ pub fn main(init: std.process.Init) !void {
             while (it.next()) |entry| {
                 const hostname = entry.key_ptr.*;
                 if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
-                std.debug.print("building {s}...\n", .{hostname});
+                std.debug.print("building " ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "...\n", .{hostname});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch {
                     // error already printed by buildSystem
                     continue;
                 };
                 defer allocator.free(path);
-                std.debug.print("  =>{s}\n", .{std.mem.trimEnd(u8, path, "\n")});
+                std.debug.print("  =>" ++ ansi.dim ++ "{s}" ++ ansi.reset ++ "\n", .{std.mem.trimEnd(u8, path, "\n")});
             }
         },
         .apply => {
@@ -52,19 +53,19 @@ pub fn main(init: std.process.Init) !void {
                 const host = entry.value_ptr.*;
                 if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
 
-                std.debug.print("[{s}] building...\n", .{hostname});
+                std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] building...\n", .{hostname});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch continue;
                 defer allocator.free(path);
                 const store_path = std.mem.trimEnd(u8, path, "\n");
-                std.debug.print("  =>{s}\n", .{store_path});
+                std.debug.print("  =>" ++ ansi.dim ++ "{s}" ++ ansi.reset ++ "\n", .{store_path});
 
-                std.debug.print("[{s}] copying... ", .{hostname});
+                std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] copying... ", .{hostname});
                 nix.copyToHost(allocator, init.io, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
-                std.debug.print("done\n", .{});
+                std.debug.print(ansi.green ++ "done" ++ ansi.reset ++ "\n", .{});
 
-                std.debug.print("[{s}] activating... ", .{hostname});
+                std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] activating... ", .{hostname});
                 ssh.activate(allocator, init.io, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
-                std.debug.print("done\n", .{});
+                std.debug.print(ansi.green ++ "done" ++ ansi.reset ++ "\n", .{});
             }
         },
         .eval => {
@@ -72,7 +73,7 @@ pub fn main(init: std.process.Init) !void {
             while (it.next()) |entry| {
                 if (!config.matchesFilter(entry.key_ptr.*, args.filter, args.exclude)) continue;
                 const h = entry.value_ptr.*;
-                std.debug.print("{s}: {s}@{s}:{d}\n", .{
+                std.debug.print(ansi.bold ++ "{s}" ++ ansi.reset ++ ": {s}@{s}:{d}\n", .{
                     entry.key_ptr.*, h.targetUser, h.targetHost, h.targetPort,
                 });
             }
