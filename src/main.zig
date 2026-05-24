@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
                 const hostname = entry.key_ptr.*;
-                if (!config.matchesFilter(hostname, args.filter)) continue;
+                if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
                 std.debug.print("building {s}... ", .{hostname});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch {
                     // error already printed by buildSystem
@@ -50,7 +50,7 @@ pub fn main(init: std.process.Init) !void {
             while (it.next()) |entry| {
                 const hostname = entry.key_ptr.*;
                 const host = entry.value_ptr.*;
-                if (!config.matchesFilter(hostname, args.filter)) continue;
+                if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
 
                 std.debug.print("[{s}] building... ", .{hostname});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch continue;
@@ -70,7 +70,7 @@ pub fn main(init: std.process.Init) !void {
         .eval => {
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
-                if (!config.matchesFilter(entry.key_ptr.*, args.filter)) continue;
+                if (!config.matchesFilter(entry.key_ptr.*, args.filter, args.exclude)) continue;
                 const h = entry.value_ptr.*;
                 std.debug.print("{s}: {s}@{s}:{d}\n", .{
                     entry.key_ptr.*, h.targetUser, h.targetHost, h.targetPort,
