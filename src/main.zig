@@ -6,8 +6,6 @@ const config = @import("./config.zig");
 const nix = @import("./nix.zig");
 const ssh = @import("./ssh.zig");
 
-// const kirikae = @import("kirikae");
-
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 
@@ -38,13 +36,13 @@ pub fn main(init: std.process.Init) !void {
             while (it.next()) |entry| {
                 const hostname = entry.key_ptr.*;
                 if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
-                std.debug.print("building {s}... ", .{hostname});
+                std.debug.print("building {s}...\n", .{hostname});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch {
                     // error already printed by buildSystem
                     continue;
                 };
                 defer allocator.free(path);
-                std.debug.print("{s}\n", .{std.mem.trimEnd(u8, path, "\n")});
+                std.debug.print("  =>{s}\n", .{std.mem.trimEnd(u8, path, "\n")});
             }
         },
         .apply => {
@@ -54,11 +52,11 @@ pub fn main(init: std.process.Init) !void {
                 const host = entry.value_ptr.*;
                 if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
 
-                std.debug.print("[{s}] building... ", .{hostname});
+                std.debug.print("[{s}] building...\n", .{hostname});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch continue;
                 defer allocator.free(path);
                 const store_path = std.mem.trimEnd(u8, path, "\n");
-                std.debug.print("{s}\n", .{store_path});
+                std.debug.print("  =>{s}\n", .{store_path});
 
                 std.debug.print("[{s}] copying... ", .{hostname});
                 nix.copyToHost(allocator, init.io, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
