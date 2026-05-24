@@ -26,3 +26,34 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
 
     return result.stdout;
 }
+
+/// Runs `nix build <flake>#nixosConfigurations.<hostname>.config.system.build.toplevel`
+/// and returns the resulting store path
+/// Caller owns the returned slice and must free it with `gpa`.
+pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, hostname: []const u8) ![]u8 {
+    const installable = try std.fmt.allocPrint(
+        gpa,
+        "{s}#nixosConfigurations.{s}.config.system.build.toplevel",
+        .{ flake_ref, hostname },
+    );
+    defer gpa.free(installable);
+
+    const result = try std.process.run(gpa, io, .{
+        .argv = &.{ "nix", "build", installable, "--no-link", "--print-out-paths" },
+    });
+    defer gpa.free(result.stderr);
+    errdefer gpa.free(result.stdout);
+
+    switch (result.term) {
+        .exited => |code| if (code != 0) {
+            std.debug.print("nix build failed for '{s}':\n{s}\n", .{ hostname, result.stderr });
+            return error.NixFailed;
+        },
+        else => {
+            std.debug.print("nix build terminated unexpectedly for '{s}'\n", .{hostname});
+            return error.NixFailed;
+        },
+    }
+
+    return result.stdout;
+}
