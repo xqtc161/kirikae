@@ -78,5 +78,16 @@ pub fn main(init: std.process.Init) !void {
                 });
             }
         },
+        .shell => {
+            const hostname = args.filter orelse {
+                std.debug.print("error: 'shell' requires a hostname\n", .{});
+                return error.MissingHostname;
+            };
+            const host = cfg.value.hosts.map.get(hostname) orelse {
+                std.debug.print("error: unknown host '{s}'\n", .{hostname});
+                return error.UnknownHost;
+            };
+            try ssh.shell(allocator, init.io, host.targetUser, host.targetHost, host.targetPort);
+        },
     }
 }

@@ -11,6 +11,7 @@ pub const Subcommand = enum {
     build,
     apply,
     eval,
+    shell,
 };
 
 pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !GlobalArgs {
@@ -35,12 +36,17 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
             if (i >= args.len) return error.MissingValue;
             result.exclude = args[i];
         } else if (arg.len > 0 and arg[0] != '-') {
-            if (result.subcommand != null) return error.UnexpectedArgument;
-            const sub = std.meta.stringToEnum(Subcommand, arg) orelse {
-                std.debug.print("error: unknown subcommand '{s}'\n", .{arg});
-                return error.UnknownSubcommand;
-            };
-            result.subcommand = sub;
+            if (result.subcommand == .shell and result.filter == null) {
+                result.filter = arg;
+            } else if (result.subcommand != null) {
+                return error.UnexpectedArgument;
+            } else {
+                const sub = std.meta.stringToEnum(Subcommand, arg) orelse {
+                    std.debug.print("error: unknown subcommand '{s}'\n", .{arg});
+                    return error.UnknownSubcommand;
+                };
+                result.subcommand = sub;
+            }
         } else {
             std.debug.print("error: unknown flag '{s}'\n", .{arg});
             return error.UnknownFlag;
@@ -49,15 +55,15 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
     return result;
 }
 
-
 pub fn printUsage() void {
     std.debug.print(
         \\Usage: kirikae [-f <flake>] [--on <nodes>] [--not-on <nodes>] <subcommand>
         \\
         \\Subcommands:
-        \\  build   Build system closures
-        \\  apply   Build and deploy to hosts
-        \\  eval    Evaluate the hive configuration
+        \\  build          Build system closures
+        \\  apply          Build and deploy to hosts
+        \\  eval           Evaluate the hive configuration
+        \\  shell <host>   Open an interactive shell on a host
         \\
         \\Options:
         \\  -f, --flake <FLAKE>   Flake to deploy (default: ".")
