@@ -38,6 +38,7 @@ pub fn main(init: std.process.Init) !void {
                 const hostname = entry.key_ptr.*;
                 if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
                 std.debug.print("building " ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "...\n", .{hostname});
+                std.debug.print("evaluating...", .{});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch {
                     // error already printed by buildSystem
                     continue;
@@ -54,6 +55,7 @@ pub fn main(init: std.process.Init) !void {
                 if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
 
                 std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] building...\n", .{hostname});
+                std.debug.print("evaluating...", .{});
                 const path = nix.buildSystem(allocator, init.io, args.flake, hostname) catch continue;
                 defer allocator.free(path);
                 const store_path = std.mem.trimEnd(u8, path, "\n");
