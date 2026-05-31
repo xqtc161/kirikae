@@ -5,6 +5,7 @@ pub const GlobalArgs = struct {
     filter: ?[]const u8,
     exclude: ?[]const u8,
     subcommand: ?Subcommand,
+    exec_args: []const []const u8 = &.{},
 };
 
 pub const Subcommand = enum {
@@ -12,6 +13,7 @@ pub const Subcommand = enum {
     apply,
     eval,
     shell,
+    exec,
 };
 
 pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !GlobalArgs {
@@ -35,6 +37,9 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
             i += 1;
             if (i >= args.len) return error.MissingValue;
             result.exclude = args[i];
+        } else if (std.mem.eql(u8, arg, "--")) {
+            result.exec_args = args[i + 1 ..];
+            break;
         } else if (arg.len > 0 and arg[0] != '-') {
             if (result.subcommand == .shell and result.filter == null) {
                 result.filter = arg;
@@ -64,6 +69,7 @@ pub fn printUsage() void {
         \\  apply          Build and deploy to hosts
         \\  eval           Evaluate the hive configuration
         \\  shell <host>   Open an interactive shell on a host
+        \\  exec -- <cmd>  Runs command on all hosts matching supplied filters 
         \\
         \\Options:
         \\  -f, --flake <FLAKE>   Flake to deploy (default: ".")

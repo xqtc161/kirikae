@@ -89,5 +89,26 @@ pub fn main(init: std.process.Init) !void {
             };
             try ssh.shell(allocator, init.io, host.targetUser, host.targetHost, host.targetPort);
         },
+        .exec => {
+            if (args.exec_args.len == 0) {
+                std.debug.print("error: no command supplied.", .{});
+                return error.NoCommand;
+            }
+            var it = cfg.value.hosts.map.iterator();
+            while (it.next()) |entry| {
+                const hostname = entry.key_ptr.*;
+                const host = entry.value_ptr.*;
+
+                if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
+                try ssh.runRemoteCmd(
+                    allocator,
+                    init.io,
+                    host.targetUser,
+                    host.targetHost,
+                    host.targetPort,
+                    args.exec_args,
+                );
+            }
+        },
     }
 }
