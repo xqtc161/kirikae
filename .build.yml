@@ -2,6 +2,13 @@ image: nixos/latest
 
 oauth: pages.sr.ht/PAGES:RW
 
+submitter:
+  git.sr.ht:
+    enabled: true
+    allow-refs:
+      - refs/heads/trunk
+      - "refs/tags/*"
+
 sources:
   - https://git.sr.ht/~xqtc/kirikae
 
