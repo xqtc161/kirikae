@@ -6,6 +6,7 @@ pub const GlobalArgs = struct {
     exclude: ?[]const u8,
     subcommand: ?Subcommand,
     exec_args: []const []const u8 = &.{},
+    sequential: bool = false,
 };
 
 pub const Subcommand = enum {
@@ -37,6 +38,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
             i += 1;
             if (i >= args.len) return error.MissingValue;
             result.exclude = args[i];
+        } else if (std.mem.eql(u8, arg, "--sequential")) {
+            result.sequential = true;
         } else if (std.mem.eql(u8, arg, "--")) {
             result.exec_args = args[i + 1 ..];
             break;
@@ -75,6 +78,7 @@ pub fn printUsage() void {
         \\  -f, --flake <FLAKE>   Flake to deploy (default: ".")
         \\  --on <NODES>          Comma-separated host filter
         \\  --not-on <NODES>      Comma-separated host exclusion filter
+        \\  --sequential          Run hosts one at a time instead of in parallel
         \\  -h, --help            Show this help
         \\
     , .{});

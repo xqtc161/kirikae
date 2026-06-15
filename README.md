@@ -68,4 +68,5 @@ Options:
   --on <NODES>          Comma-separated host filter
   --not-on <NODES>      Comma-separated host exclusion filter
   -h, --help            Show this help
+  --sequential          Apply configs sequentially 
 ```

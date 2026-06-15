@@ -153,7 +153,7 @@ fn streamBuildStderr(
 /// Caller owns the returned slice and must free it with `gpa`.
 /// Expects the caller to have already printed a trailing newline so the TUI
 /// can expand below the current line.
-pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, hostname: []const u8) ![]u8 {
+pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, hostname: []const u8, show_progress: bool) ![]u8 {
     const installable = try std.fmt.allocPrint(
         gpa,
         "{s}#nixosConfigurations.{s}.config.system.build.toplevel",
@@ -179,10 +179,14 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     var stderr_reader = child.stderr.?.readerStreaming(io, &stderr_buf);
     var stderr_log: std.ArrayList(u8) = .empty;
     defer stderr_log.deinit(gpa);
-    var disp: progress.Display = .{};
 
-    try streamBuildStderr(gpa, &stderr_reader.interface, &disp, &stderr_log);
-    disp.clear();
+    if (show_progress) {
+        var disp: progress.Display = .{};
+        try streamBuildStderr(gpa, &stderr_reader.interface, &disp, &stderr_log);
+        disp.clear();
+    } else {
+        try stderr_reader.interface.appendRemainingUnlimited(gpa, &stderr_log);
+    }
 
     child.stderr.?.close(io);
     child.stderr = null;
