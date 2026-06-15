@@ -110,15 +110,19 @@ pub fn activate(
     );
     defer gpa.free(cmd);
 
+    // -tt forces PTY allocation on the remote side so SSH exits as soon as the
+    // remote shell exits, even if children forked by switch-to-configuration
+    // still hold the pipe FDs open (which would otherwise hang std.process.run).
+    // With a PTY, stdout and stderr are merged into stdout.
     const result = try std.process.run(gpa, io, .{
-        .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host, cmd },
+        .argv = &.{ "ssh", "-tt", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host, cmd },
     });
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print("activation failed:\n{s}\n", .{result.stderr});
+            std.debug.print("activation failed:\n{s}\n", .{result.stdout});
             return error.ActivationFailed;
         },
         else => {
