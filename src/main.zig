@@ -84,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
                             nix.copyToHost(allocator, init.io, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
                             std.debug.print(ansi.green ++ "done" ++ ansi.reset ++ "\n", .{});
                             std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] activating... ", .{hostname});
-                            ssh.activate(allocator, init.io, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
+                            ssh.activate(allocator, init.io, store_path, host.targetUser, host.targetHost, host.targetPort, args.reboot) catch continue;
                             std.debug.print(ansi.green ++ "done" ++ ansi.reset ++ "\n", .{});
                         },
                         .exec => {
@@ -112,6 +112,7 @@ pub fn main(init: std.process.Init) !void {
                         .flake = args.flake,
                         .environ_map = init.environ_map,
                         .exec_args = args.exec_args,
+                        .reboot = args.reboot,
                     });
                 }
 
@@ -137,6 +138,7 @@ const HostTask = struct {
     flake: []const u8,
     environ_map: *const std.process.Environ.Map,
     exec_args: []const []const u8,
+    reboot: bool,
 
     fn log(self: *const HostTask, comptime fmt: []const u8, args: anytype) void {
         self.mutex.lockUncancelable(self.io);
@@ -174,7 +176,7 @@ const HostTask = struct {
         self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] copying " ++ ansi.green ++ "done" ++ ansi.reset ++ "\n", .{self.hostname});
 
         self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] activating...\n", .{self.hostname});
-        ssh.activate(self.gpa, self.io, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort) catch return;
+        ssh.activate(self.gpa, self.io, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.reboot) catch return;
         self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] " ++ ansi.green ++ "done" ++ ansi.reset ++ "\n", .{self.hostname});
     }
 
