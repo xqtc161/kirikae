@@ -69,4 +69,5 @@ Options:
   --not-on <NODES>      Comma-separated host exclusion filter
   -h, --help            Show this help
   --sequential          Apply configs sequentially 
+  --reboot              Reboot the host before switching to new config
 ```

@@ -126,6 +126,29 @@ pub fn activate(
         }
 
         try waitForReboot(gpa, io, port_str, user_host);
+
+        const check_cmd = "readlink /run/current-system";
+        const r3 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{check_cmd}) });
+        defer gpa.free(r3.stdout);
+        defer gpa.free(r3.stderr);
+
+        switch (r3.term) {
+            .exited => |code| {
+                if (code != 0) {
+                    std.debug.print("listing current system path failed", .{});
+                    return error.ActivationFailed;
+                }
+            },
+            else => {},
+        }
+
+        switch (std.mem.eql(u8, r3.stdout, store_path)) {
+            true => {},
+            false => {
+                std.debug.print("Store path mismatch on booted config", .{});
+                return error.ActivationFailed;
+            },
+        }
     } else {
         // -tt: PTY so SSH exits when switch-to-configuration does, even if child procs hold FDs
         const cmd = try std.fmt.allocPrint(
