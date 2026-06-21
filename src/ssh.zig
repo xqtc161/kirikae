@@ -1,4 +1,5 @@
 const std = @import("std");
+const Duration = std.Io.Duration;
 
 /// Spawns an interactive SSH shell on the target, inheriting stdio.
 pub fn shell(
@@ -86,9 +87,6 @@ pub fn runRemoteCmd(
     }
 }
 
-/// SSHs into the target and runs the NixOS activation sequence:
-///   nix-env -p /nix/var/nix/profiles/system --set <store_path>
-///   <store_path>/bin/switch-to-configuration switch
 pub fn activate(
     gpa: std.mem.Allocator,
     io: std.Io,
@@ -96,38 +94,92 @@ pub fn activate(
     target_user: []const u8,
     target_host: []const u8,
     target_port: u16,
+    reboot: bool,
 ) !void {
     const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
     defer gpa.free(port_str);
-
     const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
     defer gpa.free(user_host);
 
-    const cmd = try std.fmt.allocPrint(
-        gpa,
-        "nix-env -p /nix/var/nix/profiles/system --set {s} && {s}/bin/switch-to-configuration switch",
-        .{ store_path, store_path },
-    );
-    defer gpa.free(cmd);
+    const ssh = &.{ "ssh", "-tt", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host };
 
-    // -tt forces PTY allocation on the remote side so SSH exits as soon as the
-    // remote shell exits, even if children forked by switch-to-configuration
-    // still hold the pipe FDs open (which would otherwise hang std.process.run).
-    // With a PTY, stdout and stderr are merged into stdout.
-    const result = try std.process.run(gpa, io, .{
-        .argv = &.{ "ssh", "-tt", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host, cmd },
-    });
-    defer gpa.free(result.stdout);
-    defer gpa.free(result.stderr);
+    if (reboot) {
+        const set_cmd = try std.fmt.allocPrint(gpa, "nix-env -p /nix/var/nix/profiles/system --set {s}", .{store_path});
+        defer gpa.free(set_cmd);
+        const r1 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{set_cmd}) });
+        defer gpa.free(r1.stdout);
+        defer gpa.free(r1.stderr);
+        switch (r1.term) {
+            .exited => |code| if (code != 0) {
+                std.debug.print("profile set failed:\n{s}\n", .{r1.stdout});
+                return error.ActivationFailed;
+            },
+            else => return error.ActivationFailed,
+        }
 
-    switch (result.term) {
-        .exited => |code| if (code != 0) {
-            std.debug.print("activation failed:\n{s}\n", .{result.stdout});
-            return error.ActivationFailed;
-        },
-        else => {
-            std.debug.print("ssh terminated unexpectedly\n", .{});
-            return error.ActivationFailed;
-        },
+        const r2 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{"reboot"}) });
+        gpa.free(r2.stdout);
+        gpa.free(r2.stderr);
+        switch (r2.term) {
+            .exited => |code| if (code != 0 and code != 255) return error.ActivationFailed,
+            else => {},
+        }
+
+        try waitForReboot(gpa, io, port_str, user_host);
+
+        const check_cmd = "readlink /run/current-system";
+        const r3 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{check_cmd}) });
+        defer gpa.free(r3.stdout);
+        defer gpa.free(r3.stderr);
+
+        switch (r3.term) {
+            .exited => |code| {
+                if (code != 0) {
+                    std.debug.print("listing current system path failed", .{});
+                    return error.ActivationFailed;
+                }
+            },
+            else => {},
+        }
+
+        switch (std.mem.eql(u8, r3.stdout, store_path)) {
+            true => {},
+            false => {
+                std.debug.print("Store path mismatch on booted config", .{});
+                return error.ActivationFailed;
+            },
+        }
+    } else {
+        // -tt: PTY so SSH exits when switch-to-configuration does, even if child procs hold FDs
+        const cmd = try std.fmt.allocPrint(
+            gpa,
+            "nix-env -p /nix/var/nix/profiles/system --set {s} && {s}/bin/switch-to-configuration switch",
+            .{ store_path, store_path },
+        );
+        defer gpa.free(cmd);
+        const r = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{cmd}) });
+        defer gpa.free(r.stdout);
+        defer gpa.free(r.stderr);
+        switch (r.term) {
+            .exited => |code| if (code != 0) {
+                std.debug.print("activation failed:\n{s}\n", .{r.stdout});
+                return error.ActivationFailed;
+            },
+            else => return error.ActivationFailed,
+        }
+    }
+}
+
+fn waitForReboot(gpa: std.mem.Allocator, io: std.Io, port_str: []const u8, user_host: []const u8) !void {
+    std.debug.print("waiting for host to come back online...\n", .{});
+    try std.Io.sleep(io, Duration.fromSeconds(1), .real);
+    while (true) {
+        const r = try std.process.run(gpa, io, .{
+            .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", user_host, "true" },
+        });
+        gpa.free(r.stdout);
+        gpa.free(r.stderr);
+        if (r.term == .exited and r.term.exited == 0) return;
+        try std.Io.sleep(io, Duration.fromSeconds(3), .real);
     }
 }

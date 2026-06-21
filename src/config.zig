@@ -60,7 +60,6 @@ fn globMatch(pattern: []const u8, str: []const u8) bool {
     return false;
 }
 
-
 test "matchesFilter" {
     try std.testing.expect(matchesFilter("webserver", null, null));
     try std.testing.expect(matchesFilter("webserver", "webserver", null));
