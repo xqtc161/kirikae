@@ -172,7 +172,7 @@ pub fn activate(
 
 fn waitForReboot(gpa: std.mem.Allocator, io: std.Io, port_str: []const u8, user_host: []const u8) !void {
     std.debug.print("waiting for host to come back online...\n", .{});
-    try std.Io.sleep(io, Duration.fromSeconds(1), .real);
+    try std.Io.sleep(io, Duration.fromSeconds(10), .real);
     while (true) {
         const r = try std.process.run(gpa, io, .{
             .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", user_host, "true" },
