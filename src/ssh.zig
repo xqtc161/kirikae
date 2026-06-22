@@ -107,9 +107,7 @@ pub fn activate(
         // On containers there is no bootloader to activate the new profile on
         // next boot, so we run switch-to-configuration boot to set up the
         // systemd activation scripts that will do it instead.
-        const set_cmd = try std.fmt.allocPrint(gpa,
-            "nix-env -p /nix/var/nix/profiles/system --set {s} && if systemd-detect-virt -c; then {s}/bin/switch-to-configuration boot; fi",
-            .{ store_path, store_path });
+        const set_cmd = try std.fmt.allocPrint(gpa, "nix-env -p /nix/var/nix/profiles/system --set {s} && if systemd-detect-virt -c; then {s}/bin/switch-to-configuration boot; fi", .{ store_path, store_path });
         defer gpa.free(set_cmd);
         const r1 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{set_cmd}) });
         defer gpa.free(r1.stdout);
@@ -133,7 +131,7 @@ pub fn activate(
         try waitForReboot(gpa, io, port_str, user_host);
 
         const check_cmd = "readlink /run/current-system";
-        const r3 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{check_cmd}) });
+        const r3 = try std.process.run(gpa, io, .{ .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host, check_cmd } });
         defer gpa.free(r3.stdout);
         defer gpa.free(r3.stderr);
 
@@ -147,10 +145,10 @@ pub fn activate(
             else => {},
         }
 
-        switch (std.mem.eql(u8, r3.stdout, store_path)) {
+        switch (std.mem.eql(u8, std.mem.trimEnd(u8, r3.stdout, "\r\n"), store_path)) {
             true => {},
             false => {
-                std.debug.print("Store path mismatch on booted config\n", .{});
+                std.debug.print("store path mismatch:\n  deployed: {s}\n  booted:   {s}\n", .{ store_path, std.mem.trimEnd(u8, r3.stdout, "\r\n") });
                 return error.ActivationFailed;
             },
         }
