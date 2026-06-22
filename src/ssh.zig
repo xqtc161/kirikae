@@ -104,7 +104,12 @@ pub fn activate(
     const ssh = &.{ "ssh", "-tt", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host };
 
     if (reboot) {
-        const set_cmd = try std.fmt.allocPrint(gpa, "nix-env -p /nix/var/nix/profiles/system --set {s}", .{store_path});
+        // On containers there is no bootloader to activate the new profile on
+        // next boot, so we run switch-to-configuration boot to set up the
+        // systemd activation scripts that will do it instead.
+        const set_cmd = try std.fmt.allocPrint(gpa,
+            "nix-env -p /nix/var/nix/profiles/system --set {s} && if systemd-detect-virt -c; then {s}/bin/switch-to-configuration boot; fi",
+            .{ store_path, store_path });
         defer gpa.free(set_cmd);
         const r1 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{set_cmd}) });
         defer gpa.free(r1.stdout);
@@ -145,7 +150,7 @@ pub fn activate(
         switch (std.mem.eql(u8, r3.stdout, store_path)) {
             true => {},
             false => {
-                std.debug.print("Store path mismatch on booted config", .{});
+                std.debug.print("Store path mismatch on booted config\n", .{});
                 return error.ActivationFailed;
             },
         }
