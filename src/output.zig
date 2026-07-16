@@ -53,36 +53,42 @@ pub const Output = struct {
 
     const Styled = struct {
         text: []const u8,
-        style: Style,
+        styles: []const Style,
         color: bool,
         pub fn format(self: Styled, w: *std.Io.Writer) std.Io.Writer.Error!void {
-            if (self.color) try w.writeAll(self.style.code());
+            if (self.color) for (self.styles) |s| try w.writeAll(s.code());
             try w.writeAll(self.text);
             if (self.color) try w.writeAll(ansi.reset);
         }
     };
 
-    fn styled(self: *const Output, style: Style, text: []const u8) Styled {
-        return .{ .text = text, .style = style, .color = self.use_color };
+    fn styled(self: *const Output, styles: []const Style, text: []const u8) Styled {
+        return .{ .text = text, .styles = styles, .color = self.use_color };
     }
 
     pub fn bold(self: *const Output, t: []const u8) Styled {
-        return self.styled(.bold, t);
+        return self.styled(&.{.bold}, t);
     }
-
     pub fn dim(self: *const Output, t: []const u8) Styled {
-        return self.styled(.dim, t);
+        return self.styled(&.{.dim}, t);
     }
-
-    pub fn green(self: *const Output, t: []const u8) Styled {
-        return self.styled(.green, t);
-    }
-
-    pub fn yellow(self: *const Output, t: []const u8) Styled {
-        return self.styled(.yellow, t);
-    }
-
     pub fn red(self: *const Output, t: []const u8) Styled {
-        return self.styled(.red, t);
+        return self.styled(&.{.red}, t);
+    }
+    pub fn green(self: *const Output, t: []const u8) Styled {
+        return self.styled(&.{.green}, t);
+    }
+    pub fn yellow(self: *const Output, t: []const u8) Styled {
+        return self.styled(&.{.yellow}, t);
+    }
+
+    pub fn boldRed(self: *const Output, t: []const u8) Styled {
+        return self.styled(&.{ .bold, .red }, t);
+    }
+    pub fn boldGreen(self: *const Output, t: []const u8) Styled {
+        return self.styled(&.{ .bold, .green }, t);
+    }
+    pub fn boldYellow(self: *const Output, t: []const u8) Styled {
+        return self.styled(&.{ .bold, .yellow }, t);
     }
 };
