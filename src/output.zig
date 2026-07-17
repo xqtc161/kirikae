@@ -12,7 +12,11 @@ pub const Output = struct {
     mutex: std.Io.Mutex = .init,
     use_color: bool,
 
-    pub fn init(self: *Output, io: std.Io, use_color: bool) void {
+    pub fn init(
+        self: *Output,
+        io: std.Io,
+        use_color: bool,
+    ) void {
         self.io = io;
         self.use_color = use_color;
         self.mutex = .init;
@@ -20,14 +24,22 @@ pub const Output = struct {
         self.err_fw = std.Io.File.stderr().writer(io, &self.err_buf);
     }
 
-    pub fn print(self: *Output, comptime fmt: []const u8, args: anytype) void {
+    pub fn print(
+        self: *Output,
+        comptime fmt: []const u8,
+        args: anytype,
+    ) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
         self.out_fw.interface.print(fmt, args) catch {};
         self.out_fw.interface.flush() catch {};
     }
 
-    pub fn err_print(self: *Output, comptime fmt: []const u8, args: anytype) void {
+    pub fn err_print(
+        self: *Output,
+        comptime fmt: []const u8,
+        args: anytype,
+    ) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
         self.err_fw.interface.print(fmt, args) catch {};
@@ -62,33 +74,67 @@ pub const Output = struct {
         }
     };
 
-    fn styled(self: *const Output, styles: []const Style, text: []const u8) Styled {
+    fn styled(
+        self: *const Output,
+        styles: []const Style,
+        text: []const u8,
+    ) Styled {
         return .{ .text = text, .styles = styles, .color = self.use_color };
     }
 
-    pub fn bold(self: *const Output, t: []const u8) Styled {
+    pub fn bold(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{.bold}, t);
     }
-    pub fn dim(self: *const Output, t: []const u8) Styled {
+
+    pub fn dim(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{.dim}, t);
     }
-    pub fn red(self: *const Output, t: []const u8) Styled {
+
+    pub fn red(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{.red}, t);
     }
-    pub fn green(self: *const Output, t: []const u8) Styled {
+
+    pub fn green(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{.green}, t);
     }
-    pub fn yellow(self: *const Output, t: []const u8) Styled {
+
+    pub fn yellow(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{.yellow}, t);
     }
 
-    pub fn boldRed(self: *const Output, t: []const u8) Styled {
+    pub fn boldRed(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{ .bold, .red }, t);
     }
-    pub fn boldGreen(self: *const Output, t: []const u8) Styled {
+
+    pub fn boldGreen(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{ .bold, .green }, t);
     }
-    pub fn boldYellow(self: *const Output, t: []const u8) Styled {
+
+    pub fn boldYellow(
+        self: *const Output,
+        t: []const u8,
+    ) Styled {
         return self.styled(&.{ .bold, .yellow }, t);
     }
 };

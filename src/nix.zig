@@ -5,7 +5,13 @@ const progress = @import("./progress.zig");
 /// Runs `nix eval <flake_ref>#<attr> --json` and returns the captured stdout.
 /// Caller owns the returned slice and must free it with `gpa`.
 /// On non-zero exit, prints nix's stderr and returns `error.NixFailed`.
-pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flake_ref: []const u8, attr: []const u8) ![]u8 {
+pub fn evalJson(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    out: *output.Output,
+    flake_ref: []const u8,
+    attr: []const u8,
+) ![]u8 {
     const installable = try std.fmt.allocPrint(gpa, "{s}#{s}", .{ flake_ref, attr });
     defer gpa.free(installable);
 
@@ -100,7 +106,9 @@ fn streamBuildStderr(
         if (!std.mem.startsWith(u8, line, nix_prefix)) continue;
         const json_str = line[nix_prefix.len..];
 
-        const parsed = std.json.parseFromSlice(std.json.Value, gpa, json_str, .{ .allocate = .alloc_always }) catch continue;
+        const parsed = std.json.parseFromSlice(std.json.Value, gpa, json_str, .{
+            .allocate = .alloc_always,
+        }) catch continue;
         defer parsed.deinit();
         const obj = switch (parsed.value) {
             .object => |o| o,
@@ -154,7 +162,14 @@ fn streamBuildStderr(
 /// Caller owns the returned slice and must free it with `gpa`.
 /// Expects the caller to have already printed a trailing newline so the TUI
 /// can expand below the current line.
-pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flake_ref: []const u8, hostname: []const u8, show_progress: bool) ![]u8 {
+pub fn buildSystem(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    out: *output.Output,
+    flake_ref: []const u8,
+    hostname: []const u8,
+    show_progress: bool,
+) ![]u8 {
     const installable = try std.fmt.allocPrint(
         gpa,
         "{s}#nixosConfigurations.{s}.config.system.build.toplevel",
@@ -163,7 +178,15 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flak
     defer gpa.free(installable);
 
     var child = try std.process.spawn(io, .{
-        .argv = &.{ "nix", "build", installable, "--no-link", "--print-out-paths", "--log-format", "internal-json" },
+        .argv = &.{
+            "nix",
+            "build",
+            installable,
+            "--no-link",
+            "--print-out-paths",
+            "--log-format",
+            "internal-json",
+        },
         .stdin = .ignore,
         .stdout = .pipe,
         .stderr = .pipe,
@@ -205,11 +228,18 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flak
     const term = try child.wait(io);
     switch (term) {
         .exited => |code| if (code != 0) {
-            out.err_print("{f} for '{s}':\n{s}\n", .{ out.red("nix build failed"), hostname, stderr_log.items });
+            out.err_print("{f} for '{s}':\n{s}\n", .{
+                out.red("nix build failed"),
+                hostname,
+                stderr_log.items,
+            });
             return error.NixFailed;
         },
         else => {
-            out.err_print("{f} for '{s}'\n", .{ out.red("nix build terminated unexpectedly"), hostname });
+            out.err_print("{f} for '{s}'\n", .{
+                out.red("nix build terminated unexpectedly"),
+                hostname,
+            });
             return error.NixFailed;
         },
     }

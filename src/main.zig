@@ -21,7 +21,11 @@ pub fn main(init: std.process.Init) !void {
     _ = iter.next();
     while (iter.next()) |arg| try argv.append(allocator, arg);
 
-    const args = cli.parseArgs(allocator, &out, argv.items) catch |err| {
+    const args = cli.parseArgs(
+        allocator,
+        &out,
+        argv.items,
+    ) catch |err| {
         out.err_print("try 'kirikae --help' for usage\n", .{});
         return err;
     };
@@ -38,9 +42,19 @@ pub fn main(init: std.process.Init) !void {
         .eval => {
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
-                if (!config.matchesFilter(entry.key_ptr.*, args.filter, args.exclude)) continue;
+                if (!config.matchesFilter(
+                    entry.key_ptr.*,
+                    args.filter,
+                    args.exclude,
+                )) continue;
+
                 const h = entry.value_ptr.*;
-                out.print("{f}: {s}@{s}:{d}\n", .{ out.bold(entry.key_ptr.*), h.targetUser, h.targetHost, h.targetPort });
+                out.print("{f}: {s}@{s}:{d}\n", .{
+                    out.bold(entry.key_ptr.*),
+                    h.targetUser,
+                    h.targetHost,
+                    h.targetPort,
+                });
             }
         },
         .shell => {
@@ -52,7 +66,13 @@ pub fn main(init: std.process.Init) !void {
                 out.err_print("error: unknown host '{s}'\n", .{hostname});
                 return error.UnknownHost;
             };
-            try ssh.shell(allocator, init.io, host.targetUser, host.targetHost, host.targetPort);
+            try ssh.shell(
+                allocator,
+                init.io,
+                host.targetUser,
+                host.targetHost,
+                host.targetPort,
+            );
         },
         .build, .apply, .exec => {
             if (subcommand == .exec and args.exec_args.len == 0) {
@@ -65,34 +85,84 @@ pub fn main(init: std.process.Init) !void {
                 while (it.next()) |entry| {
                     const hostname = entry.key_ptr.*;
                     const host = entry.value_ptr.*;
-                    if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
+                    if (!config.matchesFilter(
+                        hostname,
+                        args.filter,
+                        args.exclude,
+                    )) continue;
                     switch (subcommand) {
                         .build => {
                             out.print("building {f}...\n", .{out.bold(hostname)});
                             out.print("evaluating...", .{});
 
-                            const path = nix.buildSystem(allocator, init.io, &out, args.flake, hostname, true) catch continue;
+                            const path = nix.buildSystem(
+                                allocator,
+                                init.io,
+                                &out,
+                                args.flake,
+                                hostname,
+                                true,
+                            ) catch continue;
                             defer allocator.free(path);
 
-                            const path_trimmed = std.mem.trimEnd(u8, path, "\n");
+                            const path_trimmed = std.mem.trimEnd(
+                                u8,
+                                path,
+                                "\n",
+                            );
                             out.print(" =>{f}\n", .{out.dim(path_trimmed)});
                         },
                         .apply => {
                             out.print("[{f}] building...\n", .{out.bold(hostname)});
                             out.print("evaluating...", .{});
-                            const path = nix.buildSystem(allocator, init.io, &out, args.flake, hostname, true) catch continue;
+                            const path = nix.buildSystem(
+                                allocator,
+                                init.io,
+                                &out,
+                                args.flake,
+                                hostname,
+                                true,
+                            ) catch continue;
+
                             defer allocator.free(path);
                             const store_path = std.mem.trimEnd(u8, path, "\n");
                             out.print("  =>{f}\n", .{out.dim(store_path)});
                             out.print("[{f}] copying... ", .{out.bold(hostname)});
-                            nix.copyToHost(allocator, init.io, &out, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
+                            nix.copyToHost(
+                                allocator,
+                                init.io,
+                                &out,
+                                init.environ_map,
+                                store_path,
+                                host.targetUser,
+                                host.targetHost,
+                                host.targetPort,
+                            ) catch continue;
+
                             out.print("{f}\n", .{out.green("done")});
                             out.print("[{f}] activating... ", .{out.bold(hostname)});
-                            ssh.activate(allocator, init.io, &out, store_path, host.targetUser, host.targetHost, host.targetPort, args.reboot) catch continue;
+                            ssh.activate(
+                                allocator,
+                                init.io,
+                                &out,
+                                store_path,
+                                host.targetUser,
+                                host.targetHost,
+                                host.targetPort,
+                                args.reboot,
+                            ) catch continue;
                             out.print("{f}\n", .{out.green("done")});
                         },
                         .exec => {
-                            try ssh.runRemoteCmd(allocator, init.io, &out, host.targetUser, host.targetHost, host.targetPort, args.exec_args);
+                            try ssh.runRemoteCmd(
+                                allocator,
+                                init.io,
+                                &out,
+                                host.targetUser,
+                                host.targetHost,
+                                host.targetPort,
+                                args.exec_args,
+                            );
                         },
                         else => unreachable,
                     }
@@ -103,7 +173,12 @@ pub fn main(init: std.process.Init) !void {
 
                 var it = cfg.value.hosts.map.iterator();
                 while (it.next()) |entry| {
-                    if (!config.matchesFilter(entry.key_ptr.*, args.filter, args.exclude)) continue;
+                    if (!config.matchesFilter(
+                        entry.key_ptr.*,
+                        args.filter,
+                        args.exclude,
+                    )) continue;
+
                     try tasks.append(allocator, .{
                         .gpa = allocator,
                         .io = init.io,
@@ -122,7 +197,11 @@ pub fn main(init: std.process.Init) !void {
                 var threads: std.ArrayList(std.Thread) = .empty;
                 defer threads.deinit(allocator);
                 for (tasks.items) |*task| {
-                    try threads.append(allocator, try std.Thread.spawn(.{}, HostTask.run, .{task}));
+                    try threads.append(allocator, try std.Thread.spawn(
+                        .{},
+                        HostTask.run,
+                        .{task},
+                    ));
                 }
                 for (threads.items) |thread| thread.join();
             }
@@ -147,32 +226,81 @@ const HostTask = struct {
             .build => self.runBuild(),
             .apply => self.runApply(),
             .exec => self.runExec() catch |err| {
-                self.out.err_print("[{f}] exec failed: {s}\n", .{ self.out.bold(self.hostname), @errorName(err) });
+                self.out.err_print("[{f}] exec failed: {s}\n", .{
+                    self.out.bold(self.hostname),
+                    @errorName(err),
+                });
             },
             else => unreachable,
         }
     }
 
     fn runBuild(self: *const HostTask) void {
-        self.out.print("[{f}] building...\n", .{self.out.bold(self.hostname)});
-        const path = nix.buildSystem(self.gpa, self.io, self.out, self.flake, self.hostname, false) catch return;
+        self.out.print("[{f}] building...\n", .{
+            self.out.bold(self.hostname),
+        });
+        const path = nix.buildSystem(
+            self.gpa,
+            self.io,
+            self.out,
+            self.flake,
+            self.hostname,
+            false,
+        ) catch return;
         defer self.gpa.free(path);
-        self.out.print("[{f}] => {f}\n", .{ self.out.bold(self.hostname), self.out.dim(std.mem.trimEnd(u8, path, "\n")) });
+
+        self.out.print("[{f}] => {f}\n", .{
+            self.out.bold(self.hostname),
+            self.out.dim(
+                std.mem.trimEnd(u8, path, "\n"),
+            ),
+        });
     }
 
     fn runApply(self: *const HostTask) void {
         self.out.print("[{f}] building...\n", .{self.out.bold(self.hostname)});
-        const path = nix.buildSystem(self.gpa, self.io, self.out, self.flake, self.hostname, false) catch return;
+        const path = nix.buildSystem(
+            self.gpa,
+            self.io,
+            self.out,
+            self.flake,
+            self.hostname,
+            false,
+        ) catch return;
         defer self.gpa.free(path);
         const store_path = std.mem.trimEnd(u8, path, "\n");
-        self.out.print("[{f}] => {f}\n", .{ self.out.bold(self.hostname), self.out.dim(store_path) });
+        self.out.print("[{f}] => {f}\n", .{
+            self.out.bold(self.hostname),
+            self.out.dim(store_path),
+        });
 
         self.out.print("[{f}] copying...\n", .{self.out.bold(self.hostname)});
-        nix.copyToHost(self.gpa, self.io, self.out, self.environ_map, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort) catch return;
-        self.out.print("[{f}] copying {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
+        nix.copyToHost(
+            self.gpa,
+            self.io,
+            self.out,
+            self.environ_map,
+            store_path,
+            self.host.targetUser,
+            self.host.targetHost,
+            self.host.targetPort,
+        ) catch return;
+        self.out.print("[{f}] copying {f}\n", .{
+            self.out.bold(self.hostname),
+            self.out.green("done"),
+        });
 
         self.out.print("[{f}] activating...\n", .{self.out.bold(self.hostname)});
-        ssh.activate(self.gpa, self.io, self.out, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.reboot) catch return;
+        ssh.activate(
+            self.gpa,
+            self.io,
+            self.out,
+            store_path,
+            self.host.targetUser,
+            self.host.targetHost,
+            self.host.targetPort,
+            self.reboot,
+        ) catch return;
         self.out.print("[{f}] {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
     }
 
