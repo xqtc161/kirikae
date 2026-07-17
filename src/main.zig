@@ -1,14 +1,17 @@
 const std = @import("std");
 const Io = std.Io;
 
-const ansi = @import("./ansi.zig");
 const cli = @import("./cli.zig");
 const config = @import("./config.zig");
 const nix = @import("./nix.zig");
 const ssh = @import("./ssh.zig");
+const output = @import("./output.zig");
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
+
+    var out: output.Output = undefined;
+    out.init(init.io, true);
 
     // Collect argv into a slice, skipping argv[0] (program name).
     // On POSIX the iterator returns slices into the static argv array.
@@ -18,17 +21,17 @@ pub fn main(init: std.process.Init) !void {
     _ = iter.next();
     while (iter.next()) |arg| try argv.append(allocator, arg);
 
-    const args = cli.parseArgs(allocator, argv.items) catch |err| {
-        std.debug.print("try 'kirikae --help' for usage\n", .{});
+    const args = cli.parseArgs(allocator, &out, argv.items) catch |err| {
+        out.err_print("try 'kirikae --help' for usage\n", .{});
         return err;
     };
 
     const subcommand = args.subcommand orelse {
-        cli.printUsage();
+        cli.printUsage(&out);
         return;
     };
 
-    const cfg = try config.load(allocator, init.io, args.flake);
+    const cfg = try config.load(allocator, init.io, &out, args.flake);
     defer cfg.deinit();
 
     switch (subcommand) {
@@ -37,25 +40,23 @@ pub fn main(init: std.process.Init) !void {
             while (it.next()) |entry| {
                 if (!config.matchesFilter(entry.key_ptr.*, args.filter, args.exclude)) continue;
                 const h = entry.value_ptr.*;
-                std.debug.print(ansi.bold ++ "{s}" ++ ansi.reset ++ ": {s}@{s}:{d}\n", .{
-                    entry.key_ptr.*, h.targetUser, h.targetHost, h.targetPort,
-                });
+                out.print("{f}: {s}@{s}:{d}\n", .{ out.bold(entry.key_ptr.*), h.targetUser, h.targetHost, h.targetPort });
             }
         },
         .shell => {
             const hostname = args.filter orelse {
-                std.debug.print("error: 'shell' requires a hostname\n", .{});
+                out.err_print("error: 'shell' requires a hostname\n", .{});
                 return error.MissingHostname;
             };
             const host = cfg.value.hosts.map.get(hostname) orelse {
-                std.debug.print("error: unknown host '{s}'\n", .{hostname});
+                out.err_print("error: unknown host '{s}'\n", .{hostname});
                 return error.UnknownHost;
             };
             try ssh.shell(allocator, init.io, host.targetUser, host.targetHost, host.targetPort);
         },
         .build, .apply, .exec => {
             if (subcommand == .exec and args.exec_args.len == 0) {
-                std.debug.print("error: no command supplied.\n", .{});
+                out.err_print("error: no command supplied.\n", .{});
                 return error.NoCommand;
             }
 
@@ -67,35 +68,36 @@ pub fn main(init: std.process.Init) !void {
                     if (!config.matchesFilter(hostname, args.filter, args.exclude)) continue;
                     switch (subcommand) {
                         .build => {
-                            std.debug.print("building " ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "...\n", .{hostname});
-                            std.debug.print("evaluating...", .{});
-                            const path = nix.buildSystem(allocator, init.io, args.flake, hostname, true) catch continue;
+                            out.print("building {f}...\n", .{out.bold(hostname)});
+                            out.print("evaluating...", .{});
+
+                            const path = nix.buildSystem(allocator, init.io, &out, args.flake, hostname, true) catch continue;
                             defer allocator.free(path);
-                            std.debug.print("  =>" ++ ansi.dim ++ "{s}" ++ ansi.reset ++ "\n", .{std.mem.trimEnd(u8, path, "\n")});
+
+                            const path_trimmed = std.mem.trimEnd(u8, path, "\n");
+                            out.print(" =>{f}\n", .{out.dim(path_trimmed)});
                         },
                         .apply => {
-                            std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] building...\n", .{hostname});
-                            std.debug.print("evaluating...", .{});
-                            const path = nix.buildSystem(allocator, init.io, args.flake, hostname, true) catch continue;
+                            out.print("[{f}] building...\n", .{out.bold(hostname)});
+                            out.print("evaluating...", .{});
+                            const path = nix.buildSystem(allocator, init.io, &out, args.flake, hostname, true) catch continue;
                             defer allocator.free(path);
                             const store_path = std.mem.trimEnd(u8, path, "\n");
-                            std.debug.print("  =>" ++ ansi.dim ++ "{s}" ++ ansi.reset ++ "\n", .{store_path});
-                            std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] copying... ", .{hostname});
-                            nix.copyToHost(allocator, init.io, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
-                            std.debug.print(ansi.green ++ "done" ++ ansi.reset ++ "\n", .{});
-                            std.debug.print("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] activating... ", .{hostname});
-                            ssh.activate(allocator, init.io, store_path, host.targetUser, host.targetHost, host.targetPort, args.reboot) catch continue;
-                            std.debug.print(ansi.green ++ "done" ++ ansi.reset ++ "\n", .{});
+                            out.print("  =>{f}\n", .{out.dim(store_path)});
+                            out.print("[{f}] copying... ", .{out.bold(hostname)});
+                            nix.copyToHost(allocator, init.io, &out, init.environ_map, store_path, host.targetUser, host.targetHost, host.targetPort) catch continue;
+                            out.print("{f}\n", .{out.green("done")});
+                            out.print("[{f}] activating... ", .{out.bold(hostname)});
+                            ssh.activate(allocator, init.io, &out, store_path, host.targetUser, host.targetHost, host.targetPort, args.reboot) catch continue;
+                            out.print("{f}\n", .{out.green("done")});
                         },
                         .exec => {
-                            try ssh.runRemoteCmd(allocator, init.io, host.targetUser, host.targetHost, host.targetPort, args.exec_args);
+                            try ssh.runRemoteCmd(allocator, init.io, &out, host.targetUser, host.targetHost, host.targetPort, args.exec_args);
                         },
                         else => unreachable,
                     }
                 }
             } else {
-                var mutex: std.Io.Mutex = std.Io.Mutex.init;
-
                 var tasks: std.ArrayList(HostTask) = .empty;
                 defer tasks.deinit(allocator);
 
@@ -105,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
                     try tasks.append(allocator, .{
                         .gpa = allocator,
                         .io = init.io,
-                        .mutex = &mutex,
+                        .out = &out,
                         .subcommand = subcommand,
                         .hostname = entry.key_ptr.*,
                         .host = entry.value_ptr.*,
@@ -131,7 +133,7 @@ pub fn main(init: std.process.Init) !void {
 const HostTask = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
-    mutex: *std.Io.Mutex,
+    out: *output.Output,
     subcommand: cli.Subcommand,
     hostname: []const u8,
     host: config.HostConfig,
@@ -140,47 +142,41 @@ const HostTask = struct {
     exec_args: []const []const u8,
     reboot: bool,
 
-    fn log(self: *const HostTask, comptime fmt: []const u8, args: anytype) void {
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        std.debug.print(fmt, args);
-    }
-
     fn run(self: *const HostTask) void {
         switch (self.subcommand) {
             .build => self.runBuild(),
             .apply => self.runApply(),
             .exec => self.runExec() catch |err| {
-                self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] exec failed: {s}\n", .{ self.hostname, @errorName(err) });
+                self.out.err_print("[{f}] exec failed: {s}\n", .{ self.out.bold(self.hostname), @errorName(err) });
             },
             else => unreachable,
         }
     }
 
     fn runBuild(self: *const HostTask) void {
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] building...\n", .{self.hostname});
-        const path = nix.buildSystem(self.gpa, self.io, self.flake, self.hostname, false) catch return;
+        self.out.print("[{f}] building...\n", .{self.out.bold(self.hostname)});
+        const path = nix.buildSystem(self.gpa, self.io, self.out, self.flake, self.hostname, false) catch return;
         defer self.gpa.free(path);
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] => " ++ ansi.dim ++ "{s}" ++ ansi.reset ++ "\n", .{ self.hostname, std.mem.trimEnd(u8, path, "\n") });
+        self.out.print("[{f}] => {f}\n", .{ self.out.bold(self.hostname), self.out.dim(std.mem.trimEnd(u8, path, "\n")) });
     }
 
     fn runApply(self: *const HostTask) void {
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] building...\n", .{self.hostname});
-        const path = nix.buildSystem(self.gpa, self.io, self.flake, self.hostname, false) catch return;
+        self.out.print("[{f}] building...\n", .{self.out.bold(self.hostname)});
+        const path = nix.buildSystem(self.gpa, self.io, self.out, self.flake, self.hostname, false) catch return;
         defer self.gpa.free(path);
         const store_path = std.mem.trimEnd(u8, path, "\n");
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] => " ++ ansi.dim ++ "{s}" ++ ansi.reset ++ "\n", .{ self.hostname, store_path });
+        self.out.print("[{f}] => {f}\n", .{ self.out.bold(self.hostname), self.out.dim(store_path) });
 
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] copying...\n", .{self.hostname});
-        nix.copyToHost(self.gpa, self.io, self.environ_map, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort) catch return;
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] copying " ++ ansi.green ++ "done" ++ ansi.reset ++ "\n", .{self.hostname});
+        self.out.print("[{f}] copying...\n", .{self.out.bold(self.hostname)});
+        nix.copyToHost(self.gpa, self.io, self.out, self.environ_map, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort) catch return;
+        self.out.print("[{f}] copying {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
 
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] activating...\n", .{self.hostname});
-        ssh.activate(self.gpa, self.io, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.reboot) catch return;
-        self.log("[" ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "] " ++ ansi.green ++ "done" ++ ansi.reset ++ "\n", .{self.hostname});
+        self.out.print("[{f}] activating...\n", .{self.out.bold(self.hostname)});
+        ssh.activate(self.gpa, self.io, self.out, store_path, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.reboot) catch return;
+        self.out.print("[{f}] {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
     }
 
     fn runExec(self: *const HostTask) !void {
-        try ssh.runRemoteCmd(self.gpa, self.io, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.exec_args);
+        try ssh.runRemoteCmd(self.gpa, self.io, self.out, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.exec_args);
     }
 };

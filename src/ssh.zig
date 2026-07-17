@@ -1,4 +1,5 @@
 const std = @import("std");
+const output = @import("./output.zig");
 const Duration = std.Io.Duration;
 
 /// Spawns an interactive SSH shell on the target, inheriting stdio.
@@ -43,6 +44,7 @@ fn escapeArg(gpa: std.mem.Allocator, arg: []const u8) ![]const u8 {
 pub fn runRemoteCmd(
     gpa: std.mem.Allocator,
     io: std.Io,
+    out: *output.Output,
     target_user: []const u8,
     target_host: []const u8,
     target_port: u16,
@@ -72,11 +74,11 @@ pub fn runRemoteCmd(
     var reader = child.stdout.?.reader(io, &buf);
 
     while (try reader.interface.takeDelimiter('\n')) |line| {
-        std.debug.print("[{s}] {s}\n", .{ target_host, line });
+        out.print("[{s}] {s}\n", .{ target_host, line });
     }
 
     if (reader.interface.buffered().len > 0) {
-        std.debug.print("[{s}] {s}\n", .{ target_host, reader.interface.buffered() });
+        out.print("[{s}] {s}\n", .{ target_host, reader.interface.buffered() });
     }
 
     const term = try child.wait(io);
@@ -90,6 +92,7 @@ pub fn runRemoteCmd(
 pub fn activate(
     gpa: std.mem.Allocator,
     io: std.Io,
+    out: *output.Output,
     store_path: []const u8,
     target_user: []const u8,
     target_host: []const u8,
@@ -114,7 +117,7 @@ pub fn activate(
         defer gpa.free(r1.stderr);
         switch (r1.term) {
             .exited => |code| if (code != 0) {
-                std.debug.print("profile set failed:\n{s}\n", .{r1.stdout});
+                out.err_print("profile set failed:\n{s}\n", .{r1.stdout});
                 return error.ActivationFailed;
             },
             else => return error.ActivationFailed,
@@ -128,7 +131,7 @@ pub fn activate(
             else => {},
         }
 
-        try waitForReboot(gpa, io, port_str, user_host);
+        try waitForReboot(gpa, io, out, port_str, user_host);
 
         const check_cmd = "readlink /run/current-system";
         const r3 = try std.process.run(gpa, io, .{ .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host, check_cmd } });
@@ -138,7 +141,7 @@ pub fn activate(
         switch (r3.term) {
             .exited => |code| {
                 if (code != 0) {
-                    std.debug.print("listing current system path failed", .{});
+                    out.err_print("listing current system path failed", .{});
                     return error.ActivationFailed;
                 }
             },
@@ -148,7 +151,7 @@ pub fn activate(
         switch (std.mem.eql(u8, std.mem.trimEnd(u8, r3.stdout, "\r\n"), store_path)) {
             true => {},
             false => {
-                std.debug.print("store path mismatch:\n  deployed: {s}\n  booted:   {s}\n", .{ store_path, std.mem.trimEnd(u8, r3.stdout, "\r\n") });
+                out.err_print("store path mismatch:\n  deployed: {s}\n  booted:   {s}\n", .{ store_path, std.mem.trimEnd(u8, r3.stdout, "\r\n") });
                 return error.ActivationFailed;
             },
         }
@@ -165,7 +168,7 @@ pub fn activate(
         defer gpa.free(r.stderr);
         switch (r.term) {
             .exited => |code| if (code != 0) {
-                std.debug.print("activation failed:\n{s}\n", .{r.stdout});
+                out.err_print("activation failed:\n{s}\n", .{r.stdout});
                 return error.ActivationFailed;
             },
             else => return error.ActivationFailed,
@@ -173,8 +176,8 @@ pub fn activate(
     }
 }
 
-fn waitForReboot(gpa: std.mem.Allocator, io: std.Io, port_str: []const u8, user_host: []const u8) !void {
-    std.debug.print("waiting for host to come back online...\n", .{});
+fn waitForReboot(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, port_str: []const u8, user_host: []const u8) !void {
+    out.print("waiting for host to come back online...\n", .{});
     try std.Io.sleep(io, Duration.fromSeconds(10), .real);
     while (true) {
         const r = try std.process.run(gpa, io, .{

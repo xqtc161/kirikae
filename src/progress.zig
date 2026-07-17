@@ -1,5 +1,6 @@
 const std = @import("std");
 const ansi = @import("./ansi.zig");
+const output = @import("./output.zig");
 
 const MAX_MSGS = 5;
 const MSG_WIDTH = 100;
@@ -9,6 +10,7 @@ const MSG_WIDTH = 100;
 /// The caller must have printed a trailing newline before the first `update`
 /// call so the block has a clean line to expand into.
 pub const Display = struct {
+    out: *output.Output,
     msg_ring: [MAX_MSGS][MSG_WIDTH]u8 = undefined,
     msg_ring_len: [MAX_MSGS]usize = .{0} ** MAX_MSGS,
     msg_head: usize = 0,
@@ -24,19 +26,19 @@ pub const Display = struct {
     }
 
     pub fn update(self: *Display, done: u64, running: u64, expected: u64) void {
-        if (self.rendered) std.debug.print("\x1b[{d}A\r", .{MAX_MSGS});
+        if (self.rendered) self.out.err_print("\x1b[{d}A\r", .{MAX_MSGS});
 
         const display_start: usize = if (self.msg_full) self.msg_head else 0;
         const display_count: usize = if (self.msg_full) MAX_MSGS else self.msg_head;
         for (0..MAX_MSGS) |i| {
             if (i < display_count) {
                 const slot = (display_start + i) % MAX_MSGS;
-                std.debug.print("\x1b[2K  {s}\x1b[0m\n", .{self.msg_ring[slot][0..self.msg_ring_len[slot]]});
+                self.out.err_print("\x1b[2K  {s}\x1b[0m\n", .{self.msg_ring[slot][0..self.msg_ring_len[slot]]});
             } else {
-                std.debug.print("\x1b[2K\n", .{});
+                self.out.err_print("\x1b[2K\n", .{});
             }
         }
-        std.debug.print(
+        self.out.err_print(
             "\x1b[2K[" ++ ansi.green ++ "{d}" ++ ansi.reset ++ "/" ++ ansi.yellow ++ "{d}" ++ ansi.reset ++ "/" ++ ansi.dim ++ "{d}" ++ ansi.reset ++ "] building...",
             .{ done, running, expected },
         );
@@ -45,6 +47,6 @@ pub const Display = struct {
 
     /// Erase the TUI block, leaving the cursor at the top of where it was.
     pub fn clear(self: *Display) void {
-        if (self.rendered) std.debug.print("\x1b[{d}A\r\x1b[J", .{MAX_MSGS});
+        if (self.rendered) self.out.err_print("\x1b[{d}A\r\x1b[J", .{MAX_MSGS});
     }
 };

@@ -1,11 +1,11 @@
 const std = @import("std");
-const ansi = @import("./ansi.zig");
+const output = @import("./output.zig");
 const progress = @import("./progress.zig");
 
 /// Runs `nix eval <flake_ref>#<attr> --json` and returns the captured stdout.
 /// Caller owns the returned slice and must free it with `gpa`.
 /// On non-zero exit, prints nix's stderr and returns `error.NixFailed`.
-pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr: []const u8) ![]u8 {
+pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flake_ref: []const u8, attr: []const u8) ![]u8 {
     const installable = try std.fmt.allocPrint(gpa, "{s}#{s}", .{ flake_ref, attr });
     defer gpa.free(installable);
 
@@ -17,11 +17,11 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print(ansi.red ++ "nix eval failed:" ++ ansi.reset ++ "\n{s}\n", .{result.stderr});
+            out.err_print("{f}\n{s}\n", .{ out.red("nix eval failed:"), result.stderr });
             return error.NixFailed;
         },
         else => {
-            std.debug.print(ansi.red ++ "nix eval terminated unexpectedly" ++ ansi.reset ++ "\n", .{});
+            out.err_print("{f}\n", .{out.red("nix eval terminated unexpectedly")});
             return error.NixFailed;
         },
     }
@@ -36,6 +36,7 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
 pub fn copyToHost(
     gpa: std.mem.Allocator,
     io: std.Io,
+    out: *output.Output,
     parent_env: *const std.process.Environ.Map,
     store_path: []const u8,
     target_user: []const u8,
@@ -60,11 +61,11 @@ pub fn copyToHost(
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print(ansi.red ++ "nix copy failed:" ++ ansi.reset ++ "\n{s}\n", .{result.stderr});
+            out.err_print("{f}\n{s}\n", .{ out.red("nix copy failed:"), result.stderr });
             return error.NixFailed;
         },
         else => {
-            std.debug.print(ansi.red ++ "nix copy terminated unexpectedly" ++ ansi.reset ++ "\n", .{});
+            out.err_print("{f}\n", .{out.red("nix copy terminated unexpectedly")});
             return error.NixFailed;
         },
     }
@@ -153,7 +154,7 @@ fn streamBuildStderr(
 /// Caller owns the returned slice and must free it with `gpa`.
 /// Expects the caller to have already printed a trailing newline so the TUI
 /// can expand below the current line.
-pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, hostname: []const u8, show_progress: bool) ![]u8 {
+pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flake_ref: []const u8, hostname: []const u8, show_progress: bool) ![]u8 {
     const installable = try std.fmt.allocPrint(
         gpa,
         "{s}#nixosConfigurations.{s}.config.system.build.toplevel",
@@ -181,7 +182,7 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     defer stderr_log.deinit(gpa);
 
     if (show_progress) {
-        var disp: progress.Display = .{};
+        var disp: progress.Display = .{ .out = out };
         try streamBuildStderr(gpa, &stderr_reader.interface, &disp, &stderr_log);
         disp.clear();
     } else {
@@ -204,11 +205,11 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     const term = try child.wait(io);
     switch (term) {
         .exited => |code| if (code != 0) {
-            std.debug.print(ansi.red ++ "nix build failed" ++ ansi.reset ++ " for '{s}':\n{s}\n", .{ hostname, stderr_log.items });
+            out.err_print("{f} for '{s}':\n{s}\n", .{ out.red("nix build failed"), hostname, stderr_log.items });
             return error.NixFailed;
         },
         else => {
-            std.debug.print(ansi.red ++ "nix build terminated unexpectedly" ++ ansi.reset ++ " for '{s}'\n", .{hostname});
+            out.err_print("{f} for '{s}'\n", .{ out.red("nix build terminated unexpectedly"), hostname });
             return error.NixFailed;
         },
     }

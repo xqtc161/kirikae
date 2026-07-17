@@ -1,5 +1,6 @@
 const std = @import("std");
 const nix = @import("./nix.zig");
+const output = @import("./output.zig");
 
 pub const HostConfig = struct {
     targetHost: []const u8,
@@ -13,8 +14,8 @@ pub const Config = struct {
 
 /// Evaluates `<flake_ref>#kirikae` and parses the result into a `Config`.
 /// Call `.deinit()` on the returned value to free all memory.
-pub fn load(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8) !std.json.Parsed(Config) {
-    const json = try nix.evalJson(gpa, io, flake_ref, "kirikae");
+pub fn load(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, flake_ref: []const u8) !std.json.Parsed(Config) {
+    const json = try nix.evalJson(gpa, io, out, flake_ref, "kirikae");
     defer gpa.free(json);
 
     return std.json.parseFromSlice(Config, gpa, json, .{
