@@ -6,6 +6,7 @@ variables:
 stages:
   - build
   - test
+  - lint
 
 .zig: &zig
   before_script:
@@ -22,3 +23,15 @@ test:
   stage: test
   script:
     - zig build test
+
+lint:
+  stage: lint
+  allow_failure: true
+  variables:
+    ZIGLINT_VERSION: "0.5.3"
+    ZIGLINT_SHA256: "7560bf5ad36170ae1560505a5e273c83376534feccad23a9f7be716f94853539"
+  script:
+    - curl -sSL "https://github.com/rockorager/ziglint/releases/download/v${ZIGLINT_VERSION}/ziglint-x86_64-linux.tar.gz" -o ziglint.tar.gz
+    - echo "${ZIGLINT_SHA256}  ziglint.tar.gz" | sha256sum -c -
+    - tar xzf ziglint.tar.gz
+    - ./ziglint src/
