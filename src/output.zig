@@ -31,19 +31,18 @@ pub const Output = struct {
     ) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
-        self.out_fw.interface.print(fmt, args) catch {};
-        self.out_fw.interface.flush() catch {};
+        self.out_fw.interface.print(fmt, args) catch return;
     }
 
-    pub fn err_print(
+    pub fn errPrint(
         self: *Output,
         comptime fmt: []const u8,
         args: anytype,
     ) void {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
-        self.err_fw.interface.print(fmt, args) catch {};
-        self.err_fw.interface.flush() catch {};
+        self.err_fw.interface.print(fmt, args) catch return;
+        self.err_fw.interface.flush() catch return;
     }
 
     pub const Style = enum {
@@ -63,10 +62,11 @@ pub const Output = struct {
         }
     };
 
-    const Styled = struct {
+    pub const Styled = struct {
         text: []const u8,
         styles: []const Style,
         color: bool,
+        // ziglint-ignore: Z012
         pub fn format(self: Styled, w: *std.Io.Writer) std.Io.Writer.Error!void {
             if (self.color) for (self.styles) |s| try w.writeAll(s.code());
             try w.writeAll(self.text);

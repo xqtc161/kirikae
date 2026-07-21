@@ -25,13 +25,13 @@ pub fn parseArgs(
     args: []const []const u8,
 ) !GlobalArgs {
     _ = allocator;
-    var result = GlobalArgs{ .filter = null, .exclude = null, .subcommand = null };
+    var result: GlobalArgs = .{ .filter = null, .exclude = null, .subcommand = null };
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
-            printUsage(out);
-            std.process.exit(0);
+            result.subcommand = null;
+            break;
         } else if (std.mem.eql(u8, arg, "-f") or std.mem.eql(u8, arg, "--flake")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
@@ -58,13 +58,13 @@ pub fn parseArgs(
                 return error.UnexpectedArgument;
             } else {
                 const sub = std.meta.stringToEnum(Subcommand, arg) orelse {
-                    out.err_print("error: unknown subcommand '{s}'\n", .{arg});
+                    out.errPrint("error: unknown subcommand '{s}'\n", .{arg});
                     return error.UnknownSubcommand;
                 };
                 result.subcommand = sub;
             }
         } else {
-            out.err_print("error: unknown flag '{s}'\n", .{arg});
+            out.errPrint("error: unknown flag '{s}'\n", .{arg});
             return error.UnknownFlag;
         }
     }

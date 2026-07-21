@@ -23,11 +23,11 @@ pub fn evalJson(
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            out.err_print("{f}\n{s}\n", .{ out.red("nix eval failed:"), result.stderr });
+            out.errPrint("{f}\n{s}\n", .{ out.red("nix eval failed:"), result.stderr });
             return error.NixFailed;
         },
         else => {
-            out.err_print("{f}\n", .{out.red("nix eval terminated unexpectedly")});
+            out.errPrint("{f}\n", .{out.red("nix eval terminated unexpectedly")});
             return error.NixFailed;
         },
     }
@@ -67,11 +67,11 @@ pub fn copyToHost(
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            out.err_print("{f}\n{s}\n", .{ out.red("nix copy failed:"), result.stderr });
+            out.errPrint("{f}\n{s}\n", .{ out.red("nix copy failed:"), result.stderr });
             return error.NixFailed;
         },
         else => {
-            out.err_print("{f}\n", .{out.red("nix copy terminated unexpectedly")});
+            out.errPrint("{f}\n", .{out.red("nix copy terminated unexpectedly")});
             return error.NixFailed;
         },
     }
@@ -94,7 +94,7 @@ fn streamBuildStderr(
     while (true) {
         const line = reader.takeDelimiter('\n') catch |e| switch (e) {
             error.StreamTooLong => {
-                _ = reader.discard(.limited(65536)) catch {};
+                _ = reader.discard(.limited(65536)) catch break;
                 continue;
             },
             error.ReadFailed => break,
@@ -150,7 +150,7 @@ fn streamBuildStderr(
                 if (arr[0] == .integer and arr[0].integer >= 0) done = @intCast(arr[0].integer);
                 if (arr[1] == .integer and arr[1].integer >= 0) expected = @intCast(arr[1].integer);
                 if (arr[2] == .integer and arr[2].integer >= 0) running = @intCast(arr[2].integer);
-                if (expected > 0) disp.update(done, running, expected);
+                if (expected > 0) try disp.update(done, running, expected);
             },
         }
     }
@@ -228,7 +228,7 @@ pub fn buildSystem(
     const term = try child.wait(io);
     switch (term) {
         .exited => |code| if (code != 0) {
-            out.err_print("{f} for '{s}':\n{s}\n", .{
+            out.errPrint("{f} for '{s}':\n{s}\n", .{
                 out.red("nix build failed"),
                 hostname,
                 stderr_log.items,
@@ -236,7 +236,7 @@ pub fn buildSystem(
             return error.NixFailed;
         },
         else => {
-            out.err_print("{f} for '{s}'\n", .{
+            out.errPrint("{f} for '{s}'\n", .{
                 out.red("nix build terminated unexpectedly"),
                 hostname,
             });

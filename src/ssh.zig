@@ -110,14 +110,19 @@ pub fn activate(
         // On containers there is no bootloader to activate the new profile on
         // next boot, so we run switch-to-configuration boot to set up the
         // systemd activation scripts that will do it instead.
-        const set_cmd = try std.fmt.allocPrint(gpa, "nix-env -p /nix/var/nix/profiles/system --set {s} && if systemd-detect-virt -c; then {s}/bin/switch-to-configuration boot; fi", .{ store_path, store_path });
+        const set_cmd = try std.fmt.allocPrint(
+            gpa,
+            // ziglint-ignore: Z024
+            "nix-env -p /nix/var/nix/profiles/system --set {s} && if systemd-detect-virt -c; then {s}/bin/switch-to-configuration boot; fi",
+            .{ store_path, store_path },
+        );
         defer gpa.free(set_cmd);
         const r1 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{set_cmd}) });
         defer gpa.free(r1.stdout);
         defer gpa.free(r1.stderr);
         switch (r1.term) {
             .exited => |code| if (code != 0) {
-                out.err_print("profile set failed:\n{s}\n", .{r1.stdout});
+                out.errPrint("profile set failed:\n{s}\n", .{r1.stdout});
                 return error.ActivationFailed;
             },
             else => return error.ActivationFailed,
@@ -134,14 +139,28 @@ pub fn activate(
         try waitForReboot(gpa, io, out, port_str, user_host);
 
         const check_cmd = "readlink /run/current-system";
-        const r3 = try std.process.run(gpa, io, .{ .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host, check_cmd } });
+        const r3 = try std.process.run(
+            gpa,
+            io,
+            .{
+                .argv = &.{
+                    "ssh",
+                    "-p",
+                    port_str,
+                    "-o",
+                    "StrictHostKeyChecking=accept-new",
+                    user_host,
+                    check_cmd,
+                },
+            },
+        );
         defer gpa.free(r3.stdout);
         defer gpa.free(r3.stderr);
 
         switch (r3.term) {
             .exited => |code| {
                 if (code != 0) {
-                    out.err_print("listing current system path failed", .{});
+                    out.errPrint("listing current system path failed", .{});
                     return error.ActivationFailed;
                 }
             },
@@ -151,7 +170,13 @@ pub fn activate(
         switch (std.mem.eql(u8, std.mem.trimEnd(u8, r3.stdout, "\r\n"), store_path)) {
             true => {},
             false => {
-                out.err_print("store path mismatch:\n  deployed: {s}\n  booted:   {s}\n", .{ store_path, std.mem.trimEnd(u8, r3.stdout, "\r\n") });
+                out.errPrint(
+                    "store path mismatch:\n  deployed: {s}\n  booted:   {s}\n",
+                    .{
+                        store_path,
+                        std.mem.trimEnd(u8, r3.stdout, "\r\n"),
+                    },
+                );
                 return error.ActivationFailed;
             },
         }
@@ -168,7 +193,7 @@ pub fn activate(
         defer gpa.free(r.stderr);
         switch (r.term) {
             .exited => |code| if (code != 0) {
-                out.err_print("activation failed:\n{s}\n", .{r.stdout});
+                out.errPrint("activation failed:\n{s}\n", .{r.stdout});
                 return error.ActivationFailed;
             },
             else => return error.ActivationFailed,
@@ -176,13 +201,35 @@ pub fn activate(
     }
 }
 
-fn waitForReboot(gpa: std.mem.Allocator, io: std.Io, out: *output.Output, port_str: []const u8, user_host: []const u8) !void {
+fn waitForReboot(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    out: *output.Output,
+    port_str: []const u8,
+    user_host: []const u8,
+) !void {
     out.print("waiting for host to come back online...\n", .{});
     try std.Io.sleep(io, Duration.fromSeconds(10), .real);
     while (true) {
-        const r = try std.process.run(gpa, io, .{
-            .argv = &.{ "ssh", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", user_host, "true" },
-        });
+        const r = try std.process.run(
+            gpa,
+            io,
+            .{
+                .argv = &.{
+                    "ssh",
+                    "-p",
+                    port_str,
+                    "-o",
+                    "StrictHostKeyChecking=accept-new",
+                    "-o",
+                    "ConnectTimeout=5",
+                    "-o",
+                    "BatchMode=yes",
+                    user_host,
+                    "true",
+                },
+            },
+        );
         gpa.free(r.stdout);
         gpa.free(r.stderr);
         if (r.term == .exited and r.term.exited == 0) return;

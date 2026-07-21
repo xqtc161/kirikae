@@ -26,7 +26,7 @@ pub fn main(init: std.process.Init) !void {
         &out,
         argv.items,
     ) catch |err| {
-        out.err_print("try 'kirikae --help' for usage\n", .{});
+        out.errPrint("try 'kirikae --help' for usage\n", .{});
         return err;
     };
 
@@ -59,11 +59,11 @@ pub fn main(init: std.process.Init) !void {
         },
         .shell => {
             const hostname = args.filter orelse {
-                out.err_print("error: 'shell' requires a hostname\n", .{});
+                out.errPrint("error: 'shell' requires a hostname\n", .{});
                 return error.MissingHostname;
             };
             const host = cfg.value.hosts.map.get(hostname) orelse {
-                out.err_print("error: unknown host '{s}'\n", .{hostname});
+                out.errPrint("error: unknown host '{s}'\n", .{hostname});
                 return error.UnknownHost;
             };
             try ssh.shell(
@@ -76,7 +76,7 @@ pub fn main(init: std.process.Init) !void {
         },
         .build, .apply, .exec => {
             if (subcommand == .exec and args.exec_args.len == 0) {
-                out.err_print("error: no command supplied.\n", .{});
+                out.errPrint("error: no command supplied.\n", .{});
                 return error.NoCommand;
             }
 
@@ -226,7 +226,7 @@ const HostTask = struct {
             .build => self.runBuild(),
             .apply => self.runApply(),
             .exec => self.runExec() catch |err| {
-                self.out.err_print("[{f}] exec failed: {s}\n", .{
+                self.out.errPrint("[{f}] exec failed: {s}\n", .{
                     self.out.bold(self.hostname),
                     @errorName(err),
                 });
@@ -305,6 +305,14 @@ const HostTask = struct {
     }
 
     fn runExec(self: *const HostTask) !void {
-        try ssh.runRemoteCmd(self.gpa, self.io, self.out, self.host.targetUser, self.host.targetHost, self.host.targetPort, self.exec_args);
+        try ssh.runRemoteCmd(
+            self.gpa,
+            self.io,
+            self.out,
+            self.host.targetUser,
+            self.host.targetHost,
+            self.host.targetPort,
+            self.exec_args,
+        );
     }
 };
