@@ -1,11 +1,17 @@
 const std = @import("std");
-const ansi = @import("./ansi.zig");
+const output = @import("./output.zig");
 const progress = @import("./progress.zig");
 
 /// Runs `nix eval <flake_ref>#<attr> --json` and returns the captured stdout.
 /// Caller owns the returned slice and must free it with `gpa`.
 /// On non-zero exit, prints nix's stderr and returns `error.NixFailed`.
-pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr: []const u8) ![]u8 {
+pub fn evalJson(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    out: *output.Output,
+    flake_ref: []const u8,
+    attr: []const u8,
+) ![]u8 {
     const installable = try std.fmt.allocPrint(gpa, "{s}#{s}", .{ flake_ref, attr });
     defer gpa.free(installable);
 
@@ -17,11 +23,11 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print(ansi.red ++ "nix eval failed:" ++ ansi.reset ++ "\n{s}\n", .{result.stderr});
+            out.errPrint("{f}\n{s}\n", .{ out.red("nix eval failed:"), result.stderr });
             return error.NixFailed;
         },
         else => {
-            std.debug.print(ansi.red ++ "nix eval terminated unexpectedly" ++ ansi.reset ++ "\n", .{});
+            out.errPrint("{f}\n", .{out.red("nix eval terminated unexpectedly")});
             return error.NixFailed;
         },
     }
@@ -36,6 +42,7 @@ pub fn evalJson(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, attr:
 pub fn copyToHost(
     gpa: std.mem.Allocator,
     io: std.Io,
+    out: *output.Output,
     parent_env: *const std.process.Environ.Map,
     store_path: []const u8,
     target_user: []const u8,
@@ -60,11 +67,11 @@ pub fn copyToHost(
 
     switch (result.term) {
         .exited => |code| if (code != 0) {
-            std.debug.print(ansi.red ++ "nix copy failed:" ++ ansi.reset ++ "\n{s}\n", .{result.stderr});
+            out.errPrint("{f}\n{s}\n", .{ out.red("nix copy failed:"), result.stderr });
             return error.NixFailed;
         },
         else => {
-            std.debug.print(ansi.red ++ "nix copy terminated unexpectedly" ++ ansi.reset ++ "\n", .{});
+            out.errPrint("{f}\n", .{out.red("nix copy terminated unexpectedly")});
             return error.NixFailed;
         },
     }
@@ -87,7 +94,7 @@ fn streamBuildStderr(
     while (true) {
         const line = reader.takeDelimiter('\n') catch |e| switch (e) {
             error.StreamTooLong => {
-                _ = reader.discard(.limited(65536)) catch {};
+                _ = reader.discard(.limited(65536)) catch break;
                 continue;
             },
             error.ReadFailed => break,
@@ -99,7 +106,9 @@ fn streamBuildStderr(
         if (!std.mem.startsWith(u8, line, nix_prefix)) continue;
         const json_str = line[nix_prefix.len..];
 
-        const parsed = std.json.parseFromSlice(std.json.Value, gpa, json_str, .{ .allocate = .alloc_always }) catch continue;
+        const parsed = std.json.parseFromSlice(std.json.Value, gpa, json_str, .{
+            .allocate = .alloc_always,
+        }) catch continue;
         defer parsed.deinit();
         const obj = switch (parsed.value) {
             .object => |o| o,
@@ -141,7 +150,7 @@ fn streamBuildStderr(
                 if (arr[0] == .integer and arr[0].integer >= 0) done = @intCast(arr[0].integer);
                 if (arr[1] == .integer and arr[1].integer >= 0) expected = @intCast(arr[1].integer);
                 if (arr[2] == .integer and arr[2].integer >= 0) running = @intCast(arr[2].integer);
-                if (expected > 0) disp.update(done, running, expected);
+                if (expected > 0) try disp.update(done, running, expected);
             },
         }
     }
@@ -153,7 +162,14 @@ fn streamBuildStderr(
 /// Caller owns the returned slice and must free it with `gpa`.
 /// Expects the caller to have already printed a trailing newline so the TUI
 /// can expand below the current line.
-pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, hostname: []const u8, show_progress: bool) ![]u8 {
+pub fn buildSystem(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    out: *output.Output,
+    flake_ref: []const u8,
+    hostname: []const u8,
+    show_progress: bool,
+) ![]u8 {
     const installable = try std.fmt.allocPrint(
         gpa,
         "{s}#nixosConfigurations.{s}.config.system.build.toplevel",
@@ -162,7 +178,15 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     defer gpa.free(installable);
 
     var child = try std.process.spawn(io, .{
-        .argv = &.{ "nix", "build", installable, "--no-link", "--print-out-paths", "--log-format", "internal-json" },
+        .argv = &.{
+            "nix",
+            "build",
+            installable,
+            "--no-link",
+            "--print-out-paths",
+            "--log-format",
+            "internal-json",
+        },
         .stdin = .ignore,
         .stdout = .pipe,
         .stderr = .pipe,
@@ -181,7 +205,7 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     defer stderr_log.deinit(gpa);
 
     if (show_progress) {
-        var disp: progress.Display = .{};
+        var disp: progress.Display = .{ .out = out };
         try streamBuildStderr(gpa, &stderr_reader.interface, &disp, &stderr_log);
         disp.clear();
     } else {
@@ -204,11 +228,18 @@ pub fn buildSystem(gpa: std.mem.Allocator, io: std.Io, flake_ref: []const u8, ho
     const term = try child.wait(io);
     switch (term) {
         .exited => |code| if (code != 0) {
-            std.debug.print(ansi.red ++ "nix build failed" ++ ansi.reset ++ " for '{s}':\n{s}\n", .{ hostname, stderr_log.items });
+            out.errPrint("{f} for '{s}':\n{s}\n", .{
+                out.red("nix build failed"),
+                hostname,
+                stderr_log.items,
+            });
             return error.NixFailed;
         },
         else => {
-            std.debug.print(ansi.red ++ "nix build terminated unexpectedly" ++ ansi.reset ++ " for '{s}'\n", .{hostname});
+            out.errPrint("{f} for '{s}'\n", .{
+                out.red("nix build terminated unexpectedly"),
+                hostname,
+            });
             return error.NixFailed;
         },
     }

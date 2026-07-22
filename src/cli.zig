@@ -1,4 +1,5 @@
 const std = @import("std");
+const output = @import("./output.zig");
 
 pub const GlobalArgs = struct {
     flake: []const u8 = ".",
@@ -18,15 +19,19 @@ pub const Subcommand = enum {
     exec,
 };
 
-pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !GlobalArgs {
+pub fn parseArgs(
+    allocator: std.mem.Allocator,
+    out: *output.Output,
+    args: []const []const u8,
+) !GlobalArgs {
     _ = allocator;
-    var result = GlobalArgs{ .filter = null, .exclude = null, .subcommand = null };
+    var result: GlobalArgs = .{ .filter = null, .exclude = null, .subcommand = null };
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
-            printUsage();
-            std.process.exit(0);
+            result.subcommand = null;
+            break;
         } else if (std.mem.eql(u8, arg, "-f") or std.mem.eql(u8, arg, "--flake")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
@@ -53,21 +58,21 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Global
                 return error.UnexpectedArgument;
             } else {
                 const sub = std.meta.stringToEnum(Subcommand, arg) orelse {
-                    std.debug.print("error: unknown subcommand '{s}'\n", .{arg});
+                    out.errPrint("error: unknown subcommand '{s}'\n", .{arg});
                     return error.UnknownSubcommand;
                 };
                 result.subcommand = sub;
             }
         } else {
-            std.debug.print("error: unknown flag '{s}'\n", .{arg});
+            out.errPrint("error: unknown flag '{s}'\n", .{arg});
             return error.UnknownFlag;
         }
     }
     return result;
 }
 
-pub fn printUsage() void {
-    std.debug.print(
+pub fn printUsage(out: *output.Output) void {
+    out.print(
         \\Usage: kirikae [-f <flake>] [--on <nodes>] [--not-on <nodes>] <subcommand>
         \\
         \\Subcommands:
