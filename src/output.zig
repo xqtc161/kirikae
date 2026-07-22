@@ -32,6 +32,7 @@ pub const Output = struct {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
         self.out_fw.interface.print(fmt, args) catch return;
+        self.out_fw.interface.flush() catch return;
     }
 
     pub fn errPrint(
