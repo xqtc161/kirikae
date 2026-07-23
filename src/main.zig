@@ -161,6 +161,8 @@ pub fn main(init: std.process.Init) !void {
                                 host.targetUser,
                                 host.targetHost,
                                 host.targetPort,
+                                hostname,
+
                                 args.exec_args,
                             );
                         },
@@ -312,6 +314,7 @@ const HostTask = struct {
             self.host.targetUser,
             self.host.targetHost,
             self.host.targetPort,
+            self.hostname,
             self.exec_args,
         );
     }

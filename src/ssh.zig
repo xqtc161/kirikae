@@ -48,6 +48,7 @@ pub fn runRemoteCmd(
     target_user: []const u8,
     target_host: []const u8,
     target_port: u16,
+    hostname: []const u8,
     cmd: []const []const u8,
 ) !void {
     const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
@@ -74,11 +75,11 @@ pub fn runRemoteCmd(
     var reader = child.stdout.?.reader(io, &buf);
 
     while (try reader.interface.takeDelimiter('\n')) |line| {
-        out.print("[{s}] {s}\n", .{ target_host, line });
+        out.print("[{s}] {s}\n", .{ hostname, line });
     }
 
     if (reader.interface.buffered().len > 0) {
-        out.print("[{s}] {s}\n", .{ target_host, reader.interface.buffered() });
+        out.print("[{s}] {s}\n", .{ hostname, reader.interface.buffered() });
     }
 
     const term = try child.wait(io);
