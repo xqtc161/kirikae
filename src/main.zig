@@ -83,91 +83,26 @@ pub fn main(init: std.process.Init) !void {
             if (args.sequential) {
                 var it = cfg.value.hosts.map.iterator();
                 while (it.next()) |entry| {
-                    const hostname = entry.key_ptr.*;
-                    const host = entry.value_ptr.*;
                     if (!config.matchesFilter(
-                        hostname,
+                        entry.key_ptr.*,
                         args.filter,
                         args.exclude,
                     )) continue;
-                    switch (subcommand) {
-                        .build => {
-                            out.print("building {f}...\n", .{out.bold(hostname)});
-                            out.print("evaluating...", .{});
 
-                            const path = nix.buildSystem(
-                                allocator,
-                                init.io,
-                                &out,
-                                args.flake,
-                                hostname,
-                                true,
-                            ) catch continue;
-                            defer allocator.free(path);
-
-                            const path_trimmed = std.mem.trimEnd(
-                                u8,
-                                path,
-                                "\n",
-                            );
-                            out.print(" =>{f}\n", .{out.dim(path_trimmed)});
-                        },
-                        .apply => {
-                            out.print("[{f}] building...\n", .{out.bold(hostname)});
-                            out.print("evaluating...", .{});
-                            const path = nix.buildSystem(
-                                allocator,
-                                init.io,
-                                &out,
-                                args.flake,
-                                hostname,
-                                true,
-                            ) catch continue;
-
-                            defer allocator.free(path);
-                            const store_path = std.mem.trimEnd(u8, path, "\n");
-                            out.print("  =>{f}\n", .{out.dim(store_path)});
-                            out.print("[{f}] copying... ", .{out.bold(hostname)});
-                            nix.copyToHost(
-                                allocator,
-                                init.io,
-                                &out,
-                                init.environ_map,
-                                store_path,
-                                host.targetUser,
-                                host.targetHost,
-                                host.targetPort,
-                            ) catch continue;
-
-                            out.print("{f}\n", .{out.green("done")});
-                            out.print("[{f}] activating... ", .{out.bold(hostname)});
-                            ssh.activate(
-                                allocator,
-                                init.io,
-                                &out,
-                                store_path,
-                                host.targetUser,
-                                host.targetHost,
-                                host.targetPort,
-                                args.reboot,
-                            ) catch continue;
-                            out.print("{f}\n", .{out.green("done")});
-                        },
-                        .exec => {
-                            try ssh.runRemoteCmd(
-                                allocator,
-                                init.io,
-                                &out,
-                                host.targetUser,
-                                host.targetHost,
-                                host.targetPort,
-                                hostname,
-
-                                args.exec_args,
-                            );
-                        },
-                        else => unreachable,
-                    }
+                    const task: HostTask = .{
+                        .gpa = allocator,
+                        .io = init.io,
+                        .out = &out,
+                        .subcommand = subcommand,
+                        .hostname = entry.key_ptr.*,
+                        .host = entry.value_ptr.*,
+                        .flake = args.flake,
+                        .environ_map = init.environ_map,
+                        .exec_args = args.exec_args,
+                        .reboot = args.reboot,
+                        .show_progress = true,
+                    };
+                    task.run();
                 }
             } else {
                 var tasks: std.ArrayList(HostTask) = .empty;
@@ -192,6 +127,7 @@ pub fn main(init: std.process.Init) !void {
                         .environ_map = init.environ_map,
                         .exec_args = args.exec_args,
                         .reboot = args.reboot,
+                        .show_progress = false,
                     });
                 }
 
@@ -222,6 +158,7 @@ const HostTask = struct {
     environ_map: *const std.process.Environ.Map,
     exec_args: []const []const u8,
     reboot: bool,
+    show_progress: bool,
 
     fn run(self: *const HostTask) void {
         switch (self.subcommand) {
@@ -247,7 +184,7 @@ const HostTask = struct {
             self.out,
             self.flake,
             self.hostname,
-            false,
+            self.show_progress,
         ) catch return;
         defer self.gpa.free(path);
 
@@ -267,7 +204,7 @@ const HostTask = struct {
             self.out,
             self.flake,
             self.hostname,
-            false,
+            self.show_progress,
         ) catch return;
         defer self.gpa.free(path);
         const store_path = std.mem.trimEnd(u8, path, "\n");
