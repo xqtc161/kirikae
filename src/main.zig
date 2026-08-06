@@ -66,13 +66,7 @@ pub fn main(init: std.process.Init) !void {
                 out.errPrint("error: unknown host '{s}'\n", .{hostname});
                 return error.UnknownHost;
             };
-            try ssh.shell(
-                allocator,
-                init.io,
-                host.targetUser,
-                host.targetHost,
-                host.targetPort,
-            );
+            try ssh.shell(allocator, init.io, host);
         },
         .build, .apply, .exec => {
             if (subcommand == .exec and args.exec_args.len == 0) {
@@ -220,9 +214,7 @@ const HostTask = struct {
             self.out,
             self.environ_map,
             store_path,
-            self.host.targetUser,
-            self.host.targetHost,
-            self.host.targetPort,
+            self.host,
         ) catch return;
         self.out.print("[{f}] copying {f}\n", .{
             self.out.bold(self.hostname),
@@ -235,9 +227,7 @@ const HostTask = struct {
             self.io,
             self.out,
             store_path,
-            self.host.targetUser,
-            self.host.targetHost,
-            self.host.targetPort,
+            self.host,
             self.reboot,
         ) catch return;
         self.out.print("[{f}] {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
@@ -248,9 +238,7 @@ const HostTask = struct {
             self.gpa,
             self.io,
             self.out,
-            self.host.targetUser,
-            self.host.targetHost,
-            self.host.targetPort,
+            self.host,
             self.hostname,
             self.exec_args,
         );

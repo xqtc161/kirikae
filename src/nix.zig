@@ -1,6 +1,7 @@
 const std = @import("std");
 const output = @import("./output.zig");
 const progress = @import("./progress.zig");
+const config = @import("./config.zig");
 
 /// Runs `nix eval <flake_ref>#<attr> --json` and returns the captured stdout.
 /// Caller owns the returned slice and must free it with `gpa`.
@@ -45,16 +46,14 @@ pub fn copyToHost(
     out: *output.Output,
     parent_env: *const std.process.Environ.Map,
     store_path: []const u8,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
 ) !void {
-    const target = try std.fmt.allocPrint(gpa, "ssh://{s}@{s}", .{ target_user, target_host });
+    const target = try std.fmt.allocPrint(gpa, "ssh://{s}@{s}", .{ host.targetUser, host.targetHost });
     defer gpa.free(target);
 
     var env = try parent_env.clone(gpa);
     defer env.deinit();
-    const ssh_opts = try std.fmt.allocPrint(gpa, "-p {d}", .{target_port});
+    const ssh_opts = try std.fmt.allocPrint(gpa, "-p {d}", .{host.targetPort});
     defer gpa.free(ssh_opts);
     try env.put("NIX_SSHOPTS", ssh_opts);
 

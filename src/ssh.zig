@@ -1,19 +1,18 @@
 const std = @import("std");
 const output = @import("./output.zig");
+const config = @import("./config.zig");
 const Duration = std.Io.Duration;
 
 /// Spawns an interactive SSH shell on the target, inheriting stdio.
 pub fn shell(
     gpa: std.mem.Allocator,
     io: std.Io,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
 ) !void {
-    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
+    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{host.targetPort});
     defer gpa.free(port_str);
 
-    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
+    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ host.targetUser, host.targetHost });
     defer gpa.free(user_host);
 
     var child = try std.process.spawn(io, .{
@@ -45,16 +44,14 @@ pub fn runRemoteCmd(
     gpa: std.mem.Allocator,
     io: std.Io,
     out: *output.Output,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
     hostname: []const u8,
     cmd: []const []const u8,
 ) !void {
-    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
+    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{host.targetPort});
     defer gpa.free(port_str);
 
-    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
+    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ host.targetUser, host.targetHost });
     defer gpa.free(user_host);
 
     var parts: std.ArrayList([]const u8) = .empty;
@@ -95,14 +92,12 @@ pub fn activate(
     io: std.Io,
     out: *output.Output,
     store_path: []const u8,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
     reboot: bool,
 ) !void {
-    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
+    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{host.targetPort});
     defer gpa.free(port_str);
-    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
+    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ host.targetUser, host.targetHost });
     defer gpa.free(user_host);
 
     const ssh = &.{ "ssh", "-tt", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host };
