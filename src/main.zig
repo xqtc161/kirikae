@@ -1,5 +1,4 @@
 const std = @import("std");
-const Io = std.Io;
 
 const cli = @import("./cli.zig");
 const config = @import("./config.zig");
@@ -161,29 +160,7 @@ const HostTask = struct {
         }
     }
 
-    fn runBuild(self: *const HostTask) void {
-        self.out.print("[{f}] building...\n", .{
-            self.out.bold(self.hostname),
-        });
-        const path = nix.buildSystem(
-            self.gpa,
-            self.io,
-            self.out,
-            self.flake,
-            self.hostname,
-            self.show_progress,
-        ) catch return;
-        defer self.gpa.free(path);
-
-        self.out.print("[{f}] => {f}\n", .{
-            self.out.bold(self.hostname),
-            self.out.dim(
-                std.mem.trimEnd(u8, path, "\n"),
-            ),
-        });
-    }
-
-    fn runApply(self: *const HostTask) void {
+    fn build(self: *const HostTask) ?[]u8 {
         self.out.print("[{f}] building...\n", .{self.out.bold(self.hostname)});
         const path = nix.buildSystem(
             self.gpa,
@@ -192,13 +169,23 @@ const HostTask = struct {
             self.flake,
             self.hostname,
             self.show_progress,
-        ) catch return;
-        defer self.gpa.free(path);
-        const store_path = std.mem.trimEnd(u8, path, "\n");
+        ) catch return null;
         self.out.print("[{f}] => {f}\n", .{
             self.out.bold(self.hostname),
-            self.out.dim(store_path),
+            self.out.dim(std.mem.trimEnd(u8, path, "\n")),
         });
+        return path;
+    }
+
+    fn runBuild(self: *const HostTask) void {
+        const path = self.build() orelse return;
+        self.gpa.free(path);
+    }
+
+    fn runApply(self: *const HostTask) void {
+        const path = self.build() orelse return;
+        defer self.gpa.free(path);
+        const store_path = std.mem.trimEnd(u8, path, "\n");
 
         self.out.print("[{f}] copying...\n", .{self.out.bold(self.hostname)});
         nix.copyToHost(
