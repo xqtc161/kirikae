@@ -22,7 +22,6 @@ pub fn main(init: std.process.Init) !void {
     while (iter.next()) |arg| try argv.append(allocator, arg);
 
     const args = cli.parseArgs(
-        allocator,
         &out,
         argv.items,
     ) catch |err| {
