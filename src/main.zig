@@ -13,17 +13,11 @@ pub fn main(init: std.process.Init) !void {
     var out: output.Output = undefined;
     out.init(init.io, true);
 
-    // Collect argv into a slice, skipping argv[0] (program name).
-    // On POSIX the iterator returns slices into the static argv array.
-    var argv: std.ArrayList([]const u8) = .empty;
-    defer argv.deinit(allocator);
-    var iter = std.process.Args.Iterator.init(init.minimal.args);
-    _ = iter.next();
-    while (iter.next()) |arg| try argv.append(allocator, arg);
+    const argv = try init.minimal.args.toSlice(init.arena.allocator());
 
     const args = cli.parseArgs(
         &out,
-        argv.items,
+        argv[1..],
     ) catch |err| {
         out.errPrint("try 'kirikae --help' for usage\n", .{});
         return err;
