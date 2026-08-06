@@ -22,17 +22,7 @@ pub fn evalJson(
     defer gpa.free(result.stderr);
     errdefer gpa.free(result.stdout);
 
-    switch (result.term) {
-        .exited => |code| if (code != 0) {
-            out.errPrint("{f}\n{s}\n", .{ out.red("nix eval failed:"), result.stderr });
-            return error.NixFailed;
-        },
-        else => {
-            out.errPrint("{f}\n", .{out.red("nix eval terminated unexpectedly")});
-            return error.NixFailed;
-        },
-    }
-
+    try out.checkExit(result.term, "nix eval failed:", result.stderr, error.NixFailed);
     return result.stdout;
 }
 
@@ -64,16 +54,7 @@ pub fn copyToHost(
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
 
-    switch (result.term) {
-        .exited => |code| if (code != 0) {
-            out.errPrint("{f}\n{s}\n", .{ out.red("nix copy failed:"), result.stderr });
-            return error.NixFailed;
-        },
-        else => {
-            out.errPrint("{f}\n", .{out.red("nix copy terminated unexpectedly")});
-            return error.NixFailed;
-        },
-    }
+    try out.checkExit(result.term, "nix copy failed:", result.stderr, error.NixFailed);
 }
 
 /// Reads nix's `--log-format internal-json` stderr stream, feeding messages

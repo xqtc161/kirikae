@@ -46,6 +46,27 @@ pub const Output = struct {
         self.err_fw.interface.flush() catch return;
     }
 
+    /// Returns `err` if the process did not exit 0 otherwise returns normally. On failure
+    /// prints `msg` to stderr, followed by `detail` when it is non-empty.
+    pub fn checkExit(
+        self: *Output,
+        term: std.process.Child.Term,
+        msg: []const u8,
+        detail: []const u8,
+        err: anyerror,
+    ) !void {
+        switch (term) {
+            .exited => |code| if (code == 0) return,
+            else => {},
+        }
+        if (detail.len > 0) {
+            self.errPrint("{f}\n{s}\n", .{ self.red(msg), detail });
+        } else {
+            self.errPrint("{f}\n", .{self.red(msg)});
+        }
+        return err;
+    }
+
     pub const Style = enum {
         bold,
         dim,

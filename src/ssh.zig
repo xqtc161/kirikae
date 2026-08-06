@@ -116,13 +116,7 @@ pub fn activate(
         const r1 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{set_cmd}) });
         defer gpa.free(r1.stdout);
         defer gpa.free(r1.stderr);
-        switch (r1.term) {
-            .exited => |code| if (code != 0) {
-                out.errPrint("profile set failed:\n{s}\n", .{r1.stdout});
-                return error.ActivationFailed;
-            },
-            else => return error.ActivationFailed,
-        }
+        try out.checkExit(r1.term, "profile set failed:", r1.stdout, error.ActivationFailed);
 
         const r2 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{"reboot"}) });
         gpa.free(r2.stdout);
@@ -187,13 +181,7 @@ pub fn activate(
         const r = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{cmd}) });
         defer gpa.free(r.stdout);
         defer gpa.free(r.stderr);
-        switch (r.term) {
-            .exited => |code| if (code != 0) {
-                out.errPrint("activation failed:\n{s}\n", .{r.stdout});
-                return error.ActivationFailed;
-            },
-            else => return error.ActivationFailed,
-        }
+        try out.checkExit(r.term, "activation failed:", r.stdout, error.ActivationFailed);
     }
 }
 

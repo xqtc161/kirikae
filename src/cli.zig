@@ -20,11 +20,9 @@ pub const Subcommand = enum {
 };
 
 pub fn parseArgs(
-    allocator: std.mem.Allocator,
     out: *output.Output,
     args: []const []const u8,
 ) !GlobalArgs {
-    _ = allocator;
     var result: GlobalArgs = .{ .filter = null, .exclude = null, .subcommand = null };
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
