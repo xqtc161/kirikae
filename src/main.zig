@@ -32,6 +32,9 @@ pub fn main(init: std.process.Init) !void {
 
     switch (subcommand) {
         .eval => {
+            var entries: std.ArrayList(EvalEntry) = .empty;
+            defer entries.deinit(allocator);
+
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
                 if (!config.matchesFilter(
@@ -39,14 +42,20 @@ pub fn main(init: std.process.Init) !void {
                     args.filter,
                     args.exclude,
                 )) continue;
+                try entries.append(allocator, .{
+                    .name = entry.key_ptr.*,
+                    .host = entry.value_ptr.*,
+                });
+            }
 
-                const h = entry.value_ptr.*;
+            std.mem.sort(EvalEntry, entries.items, {}, EvalEntry.higherNice);
+            for (entries.items) |e| {
                 out.print("{f}: {s}@{s}:{d} (nice {d})\n", .{
-                    out.bold(entry.key_ptr.*),
-                    h.targetUser,
-                    h.targetHost,
-                    h.targetPort,
-                    h.nice,
+                    out.bold(e.name),
+                    e.host.targetUser,
+                    e.host.targetHost,
+                    e.host.targetPort,
+                    e.host.nice,
                 });
             }
         },
@@ -118,6 +127,14 @@ pub fn main(init: std.process.Init) !void {
         },
     }
 }
+
+const EvalEntry = struct {
+    name: []const u8,
+    host: config.HostConfig,
+    fn higherNice(_: void, a: EvalEntry, b: EvalEntry) bool {
+        return a.host.nice > b.host.nice;
+    }
+};
 
 /// Spawns one thread per task running `func`, then joins them all.
 /// The slice must be finalised before calling so realloc can't invalidate pointers.
