@@ -192,7 +192,13 @@ const HostTask = struct {
             self.flake,
             self.hostname,
             self.show_progress,
-        ) catch return null;
+        ) catch |err| {
+            self.out.errPrint("[{f}] build failed: {s}\n", .{
+                self.out.bold(self.hostname),
+                @errorName(err),
+            });
+            return null;
+        };
         self.out.print("[{f}] => {f}\n", .{
             self.out.bold(self.hostname),
             self.out.dim(std.mem.trimEnd(u8, path, "\n")),
@@ -227,7 +233,13 @@ const HostTask = struct {
             self.environ_map,
             store_path,
             self.host,
-        ) catch return;
+        ) catch |err| {
+            self.out.errPrint("[{f}] copy failed: {s}\n", .{
+                self.out.bold(self.hostname),
+                @errorName(err),
+            });
+            return;
+        };
         self.out.print("[{f}] copying {f}\n", .{
             self.out.bold(self.hostname),
             self.out.green("done"),
@@ -241,7 +253,13 @@ const HostTask = struct {
             store_path,
             self.host,
             self.reboot,
-        ) catch return;
+        ) catch |err| {
+            self.out.errPrint("[{f}] activation failed: {s}\n", .{
+                self.out.bold(self.hostname),
+                @errorName(err),
+            });
+            return;
+        };
         self.out.print("[{f}] {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
     }
 
