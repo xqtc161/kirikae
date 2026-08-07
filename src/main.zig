@@ -145,8 +145,12 @@ fn spawnJoin(
 ) !void {
     var threads: std.ArrayList(std.Thread) = .empty;
     defer threads.deinit(gpa);
+    // reserve up front so append cant fail after a thread is spawned
+    // and join whatever started if a later spawn fails
+    try threads.ensureTotalCapacity(gpa, tasks.len);
+    errdefer for (threads.items) |thread| thread.join();
     for (tasks) |*task| {
-        try threads.append(gpa, try std.Thread.spawn(.{}, func, .{task}));
+        threads.appendAssumeCapacity(try std.Thread.spawn(.{}, func, .{task}));
     }
     for (threads.items) |thread| thread.join();
 }
