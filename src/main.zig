@@ -226,6 +226,7 @@ const HostTask = struct {
 
     fn runDeploy(self: *HostTask) void {
         const path = self.store_path orelse return;
+        self.store_path = null; // clear so it can't dangle or be double-freed
         defer self.gpa.free(path);
         const store_path = std.mem.trimEnd(u8, path, "\n");
 
