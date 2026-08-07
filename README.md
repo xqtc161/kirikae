@@ -1,4 +1,4 @@
-# kirikae
+![](./static/kirikae-logo.svg)
 
 > 切り替え (kirikae) - ichidan verb, transitive verb - to change; to exchange; to convert; to renew; to throw a switch; to replace; to switch over
 
@@ -6,7 +6,7 @@
 
 A simple [NixOS](https://nixos.org) deployment tool inspired by [colmena](https://github.com/zhaofengli/colmena).
 
-## Usage
+# Usage
 
 Example flake setup:
 
