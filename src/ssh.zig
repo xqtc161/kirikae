@@ -95,7 +95,17 @@ pub fn runRemoteCmd(
     var buf: [4096]u8 = undefined;
     var reader = child.stdout.?.reader(io, &buf);
 
-    while (try reader.interface.takeDelimiter('\n')) |line| {
+    while (true) {
+        const line = reader.interface.takeDelimiter('\n') catch |e| switch (e) {
+            // if a line exceeds 4kb buffer we flush the buffered chunk and continue
+            error.StreamTooLong => {
+                const chunk = reader.interface.buffered();
+                out.print("[{s}] {s}\n", .{ hostname, chunk });
+                reader.interface.toss(chunk.len);
+                continue;
+            },
+            error.ReadFailed => return error.ReadFailed,
+        } orelse break;
         out.print("[{s}] {s}\n", .{ hostname, line });
     }
 
