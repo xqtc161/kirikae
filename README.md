@@ -60,15 +60,17 @@ kirikae -f path:. --on "ex*" --not-on "example2" apply
 kirikae [-f <flake>] [--on <nodes>] [--not-on <nodes>] <subcommand>
 
 Subcommands:
-  build   Build system closures
-  apply   Build and deploy to hosts
-  eval    Evaluate the hive configuration
+  build          Build system closures
+  apply          Build and deploy to hosts
+  eval           Evaluate the hive configuration (hosts listed in descending nice order)
+  shell <host>   Open an interactive shell on a host
+  exec -- <cmd>  Run a command on all hosts matching the supplied filters
 
 Options:
   -f, --flake <FLAKE>   Flake to deploy (default: ".")
   --on <NODES>          Comma-separated host filter
   --not-on <NODES>      Comma-separated host exclusion filter
+  --sequential          Run hosts one at a time instead of in parallel
+  --reboot              Reboot host(s) before activating the new config
   -h, --help            Show this help
-  --sequential          Apply configs sequentially 
-  --reboot              Reboot the host before switching to new config
 ```

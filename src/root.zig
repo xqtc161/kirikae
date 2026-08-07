@@ -7,9 +7,10 @@
 //!
 //! ```nix
 //! kirikae.hosts.myhost = {
-//!   targetHost = "10.0.0.1";  # required
+//!   targetHost = "10.0.0.1";   # required
 //!   targetUser = "root";       # optional, default "root"
 //!   targetPort = 22;           # optional, default 22
+//!   nice = 100;                # optional, higher means it get's deployed first, default 0
 //! };
 //! ```
 //!
@@ -36,5 +37,6 @@ pub const cli = @import("cli.zig");
 pub const config = @import("config.zig");
 pub const nix = @import("nix.zig");
 pub const ssh = @import("ssh.zig");
+pub const output = @import("output.zig");
 pub const progress = @import("progress.zig");
 pub const ansi = @import("ansi.zig");
