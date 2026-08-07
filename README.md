@@ -41,6 +41,7 @@ Example flake setup:
           targetHost = "10.187.1.2";
           targetUser = "root";
           targetPort = 3333;
+          nice = 100; # higher = deployed first (default 0)
         };
       };
     };

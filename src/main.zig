@@ -41,11 +41,12 @@ pub fn main(init: std.process.Init) !void {
                 )) continue;
 
                 const h = entry.value_ptr.*;
-                out.print("{f}: {s}@{s}:{d}\n", .{
+                out.print("{f}: {s}@{s}:{d} (nice {d})\n", .{
                     out.bold(entry.key_ptr.*),
                     h.targetUser,
                     h.targetHost,
                     h.targetPort,
+                    h.nice,
                 });
             }
         },

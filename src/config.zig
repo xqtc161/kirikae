@@ -6,6 +6,7 @@ pub const HostConfig = struct {
     targetHost: []const u8,
     targetUser: []const u8 = "root",
     targetPort: u16 = 22,
+    nice: i64 = 0,
 };
 
 pub const Config = struct {

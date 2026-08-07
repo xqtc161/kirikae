@@ -41,16 +41,19 @@
           targetHost = "10.0.0.1";
           targetUser = "root";
           targetPort = 22;
+          nice = 4000; # evaluates and gets deployed first
         };
         database = {
           targetHost = "10.0.0.2";
           targetUser = "deploy";
           targetPort = 22;
+          nice = 3000;
         };
         vpn = {
           targetHost = "203.0.113.5";
           targetUser = "root";
           targetPort = 2222;
+          nice = 0; # default
         };
       };
     };
