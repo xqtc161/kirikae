@@ -145,8 +145,12 @@ fn spawnJoin(
 ) !void {
     var threads: std.ArrayList(std.Thread) = .empty;
     defer threads.deinit(gpa);
+    // reserve up front so append cant fail after a thread is spawned
+    // and join whatever started if a later spawn fails
+    try threads.ensureTotalCapacity(gpa, tasks.len);
+    errdefer for (threads.items) |thread| thread.join();
     for (tasks) |*task| {
-        try threads.append(gpa, try std.Thread.spawn(.{}, func, .{task}));
+        threads.appendAssumeCapacity(try std.Thread.spawn(.{}, func, .{task}));
     }
     for (threads.items) |thread| thread.join();
 }
@@ -192,7 +196,13 @@ const HostTask = struct {
             self.flake,
             self.hostname,
             self.show_progress,
-        ) catch return null;
+        ) catch |err| {
+            self.out.errPrint("[{f}] build failed: {s}\n", .{
+                self.out.bold(self.hostname),
+                @errorName(err),
+            });
+            return null;
+        };
         self.out.print("[{f}] => {f}\n", .{
             self.out.bold(self.hostname),
             self.out.dim(std.mem.trimEnd(u8, path, "\n")),
@@ -216,6 +226,7 @@ const HostTask = struct {
 
     fn runDeploy(self: *HostTask) void {
         const path = self.store_path orelse return;
+        self.store_path = null; // clear so it can't dangle or be double-freed
         defer self.gpa.free(path);
         const store_path = std.mem.trimEnd(u8, path, "\n");
 
@@ -227,7 +238,13 @@ const HostTask = struct {
             self.environ_map,
             store_path,
             self.host,
-        ) catch return;
+        ) catch |err| {
+            self.out.errPrint("[{f}] copy failed: {s}\n", .{
+                self.out.bold(self.hostname),
+                @errorName(err),
+            });
+            return;
+        };
         self.out.print("[{f}] copying {f}\n", .{
             self.out.bold(self.hostname),
             self.out.green("done"),
@@ -241,7 +258,13 @@ const HostTask = struct {
             store_path,
             self.host,
             self.reboot,
-        ) catch return;
+        ) catch |err| {
+            self.out.errPrint("[{f}] activation failed: {s}\n", .{
+                self.out.bold(self.hostname),
+                @errorName(err),
+            });
+            return;
+        };
         self.out.print("[{f}] {f}\n", .{ self.out.bold(self.hostname), self.out.green("done") });
     }
 

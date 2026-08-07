@@ -95,7 +95,17 @@ pub fn runRemoteCmd(
     var buf: [4096]u8 = undefined;
     var reader = child.stdout.?.reader(io, &buf);
 
-    while (try reader.interface.takeDelimiter('\n')) |line| {
+    while (true) {
+        const line = reader.interface.takeDelimiter('\n') catch |e| switch (e) {
+            // if a line exceeds 4kb buffer we flush the buffered chunk and continue
+            error.StreamTooLong => {
+                const chunk = reader.interface.buffered();
+                out.print("[{s}] {s}\n", .{ hostname, chunk });
+                reader.interface.toss(chunk.len);
+                continue;
+            },
+            error.ReadFailed => return error.ReadFailed,
+        } orelse break;
         out.print("[{s}] {s}\n", .{ hostname, line });
     }
 
@@ -203,9 +213,12 @@ fn waitForReboot(
     out: *output.Output,
     base: SshBase,
 ) !void {
+    const max_attempts = 40;
+
     out.print("waiting for host to come back online...\n", .{});
     try std.Io.sleep(io, Duration.fromSeconds(10), .real);
-    while (true) {
+    var attempt: usize = 0;
+    while (attempt < max_attempts) : (attempt += 1) {
         // Extra `-o` options must precede the host, so this argv is built
         // by hand rather than via `base.argv` (which puts the host last).
         const r = try std.process.run(
@@ -232,4 +245,6 @@ fn waitForReboot(
         if (r.term == .exited and r.term.exited == 0) return;
         try std.Io.sleep(io, Duration.fromSeconds(3), .real);
     }
+    out.errPrint("host did not come back online within timeout\n", .{});
+    return error.RebootTimeout;
 }
