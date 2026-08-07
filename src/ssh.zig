@@ -1,23 +1,48 @@
 const std = @import("std");
 const output = @import("./output.zig");
+const config = @import("./config.zig");
 const Duration = std.Io.Duration;
+
+const SshBase = struct {
+    gpa: std.mem.Allocator,
+    port_str: []const u8,
+    user_host: []const u8,
+
+    fn init(gpa: std.mem.Allocator, host: config.HostConfig) !SshBase {
+        return .{
+            .gpa = gpa,
+            .port_str = try std.fmt.allocPrint(gpa, "{d}", .{host.targetPort}),
+            .user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ host.targetUser, host.targetHost }),
+        };
+    }
+
+    fn deinit(self: SshBase) void {
+        self.gpa.free(self.port_str);
+        self.gpa.free(self.user_host);
+    }
+
+    /// base invocation. `pty` adds `-tt`
+    fn argv(self: SshBase, comptime pty: bool) [if (!pty) 6 else 7][]const u8 {
+        const flags = switch (pty) {
+            true => [_][]const u8{ "ssh", "-tt", "-p", self.port_str, "-o", "StrictHostKeyChecking=accept-new" },
+            false => [_][]const u8{ "ssh", "-p", self.port_str, "-o", "StrictHostKeyChecking=accept-new" },
+        };
+        return flags ++ .{self.user_host};
+    }
+};
 
 /// Spawns an interactive SSH shell on the target, inheriting stdio.
 pub fn shell(
     gpa: std.mem.Allocator,
     io: std.Io,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
 ) !void {
-    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
-    defer gpa.free(port_str);
-
-    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
-    defer gpa.free(user_host);
+    var base = try SshBase.init(gpa, host);
+    defer base.deinit();
+    const argv = base.argv(false);
 
     var child = try std.process.spawn(io, .{
-        .argv = &.{ "ssh", "-p", port_str, user_host },
+        .argv = &argv,
     });
     const term = try child.wait(io);
     switch (term) {
@@ -45,17 +70,13 @@ pub fn runRemoteCmd(
     gpa: std.mem.Allocator,
     io: std.Io,
     out: *output.Output,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
     hostname: []const u8,
     cmd: []const []const u8,
 ) !void {
-    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
-    defer gpa.free(port_str);
-
-    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
-    defer gpa.free(user_host);
+    var base = try SshBase.init(gpa, host);
+    defer base.deinit();
+    const argv = base.argv(false);
 
     var parts: std.ArrayList([]const u8) = .empty;
     defer {
@@ -69,7 +90,7 @@ pub fn runRemoteCmd(
     var child = try std.process.spawn(io, .{
         .stdout = .pipe,
         .stderr = .inherit,
-        .argv = &.{ "ssh", "-p", port_str, user_host, remote_cmd },
+        .argv = &(argv ++ .{remote_cmd}),
     });
     var buf: [4096]u8 = undefined;
     var reader = child.stdout.?.reader(io, &buf);
@@ -95,17 +116,12 @@ pub fn activate(
     io: std.Io,
     out: *output.Output,
     store_path: []const u8,
-    target_user: []const u8,
-    target_host: []const u8,
-    target_port: u16,
+    host: config.HostConfig,
     reboot: bool,
 ) !void {
-    const port_str = try std.fmt.allocPrint(gpa, "{d}", .{target_port});
-    defer gpa.free(port_str);
-    const user_host = try std.fmt.allocPrint(gpa, "{s}@{s}", .{ target_user, target_host });
-    defer gpa.free(user_host);
-
-    const ssh = &.{ "ssh", "-tt", "-p", port_str, "-o", "StrictHostKeyChecking=accept-new", user_host };
+    var base = try SshBase.init(gpa, host);
+    defer base.deinit();
+    const argv = base.argv(true);
 
     if (reboot) {
         // On containers there is no bootloader to activate the new profile on
@@ -118,18 +134,12 @@ pub fn activate(
             .{ store_path, store_path },
         );
         defer gpa.free(set_cmd);
-        const r1 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{set_cmd}) });
+        const r1 = try std.process.run(gpa, io, .{ .argv = &(argv ++ .{set_cmd}) });
         defer gpa.free(r1.stdout);
         defer gpa.free(r1.stderr);
-        switch (r1.term) {
-            .exited => |code| if (code != 0) {
-                out.errPrint("profile set failed:\n{s}\n", .{r1.stdout});
-                return error.ActivationFailed;
-            },
-            else => return error.ActivationFailed,
-        }
+        try out.checkExit(r1.term, "profile set failed:", r1.stdout, error.ActivationFailed);
 
-        const r2 = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{"reboot"}) });
+        const r2 = try std.process.run(gpa, io, .{ .argv = &(argv ++ .{"reboot"}) });
         gpa.free(r2.stdout);
         gpa.free(r2.stderr);
         switch (r2.term) {
@@ -137,23 +147,14 @@ pub fn activate(
             else => {},
         }
 
-        try waitForReboot(gpa, io, out, port_str, user_host);
+        try waitForReboot(gpa, io, out, base);
 
         const check_cmd = "readlink /run/current-system";
+        const plain_argv = base.argv(false);
         const r3 = try std.process.run(
             gpa,
             io,
-            .{
-                .argv = &.{
-                    "ssh",
-                    "-p",
-                    port_str,
-                    "-o",
-                    "StrictHostKeyChecking=accept-new",
-                    user_host,
-                    check_cmd,
-                },
-            },
+            .{ .argv = &(plain_argv ++ .{check_cmd}) },
         );
         defer gpa.free(r3.stdout);
         defer gpa.free(r3.stderr);
@@ -189,16 +190,10 @@ pub fn activate(
             .{ store_path, store_path },
         );
         defer gpa.free(cmd);
-        const r = try std.process.run(gpa, io, .{ .argv = &(ssh.* ++ .{cmd}) });
+        const r = try std.process.run(gpa, io, .{ .argv = &(argv ++ .{cmd}) });
         defer gpa.free(r.stdout);
         defer gpa.free(r.stderr);
-        switch (r.term) {
-            .exited => |code| if (code != 0) {
-                out.errPrint("activation failed:\n{s}\n", .{r.stdout});
-                return error.ActivationFailed;
-            },
-            else => return error.ActivationFailed,
-        }
+        try out.checkExit(r.term, "activation failed:", r.stdout, error.ActivationFailed);
     }
 }
 
@@ -206,12 +201,13 @@ fn waitForReboot(
     gpa: std.mem.Allocator,
     io: std.Io,
     out: *output.Output,
-    port_str: []const u8,
-    user_host: []const u8,
+    base: SshBase,
 ) !void {
     out.print("waiting for host to come back online...\n", .{});
     try std.Io.sleep(io, Duration.fromSeconds(10), .real);
     while (true) {
+        // Extra `-o` options must precede the host, so this argv is built
+        // by hand rather than via `base.argv` (which puts the host last).
         const r = try std.process.run(
             gpa,
             io,
@@ -219,14 +215,14 @@ fn waitForReboot(
                 .argv = &.{
                     "ssh",
                     "-p",
-                    port_str,
+                    base.port_str,
                     "-o",
                     "StrictHostKeyChecking=accept-new",
                     "-o",
                     "ConnectTimeout=5",
                     "-o",
                     "BatchMode=yes",
-                    user_host,
+                    base.user_host,
                     "true",
                 },
             },

@@ -3,9 +3,9 @@ const output = @import("./output.zig");
 
 pub const GlobalArgs = struct {
     flake: []const u8 = ".",
-    filter: ?[]const u8,
-    exclude: ?[]const u8,
-    subcommand: ?Subcommand,
+    filter: ?[]const u8 = null,
+    exclude: ?[]const u8 = null,
+    subcommand: ?Subcommand = null,
     exec_args: []const []const u8 = &.{},
     sequential: bool = false,
     reboot: bool = false,
@@ -20,12 +20,10 @@ pub const Subcommand = enum {
 };
 
 pub fn parseArgs(
-    allocator: std.mem.Allocator,
     out: *output.Output,
     args: []const []const u8,
 ) !GlobalArgs {
-    _ = allocator;
-    var result: GlobalArgs = .{ .filter = null, .exclude = null, .subcommand = null };
+    var result: GlobalArgs = .{};
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
