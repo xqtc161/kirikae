@@ -32,6 +32,9 @@ pub fn main(init: std.process.Init) !void {
 
     switch (subcommand) {
         .eval => {
+            var entries: std.ArrayList(EvalEntry) = .empty;
+            defer entries.deinit(allocator);
+
             var it = cfg.value.hosts.map.iterator();
             while (it.next()) |entry| {
                 if (!config.matchesFilter(
@@ -39,13 +42,20 @@ pub fn main(init: std.process.Init) !void {
                     args.filter,
                     args.exclude,
                 )) continue;
+                try entries.append(allocator, .{
+                    .name = entry.key_ptr.*,
+                    .host = entry.value_ptr.*,
+                });
+            }
 
-                const h = entry.value_ptr.*;
-                out.print("{f}: {s}@{s}:{d}\n", .{
-                    out.bold(entry.key_ptr.*),
-                    h.targetUser,
-                    h.targetHost,
-                    h.targetPort,
+            std.mem.sort(EvalEntry, entries.items, {}, EvalEntry.higherNice);
+            for (entries.items) |e| {
+                out.print("{f}: {s}@{s}:{d} (nice {d})\n", .{
+                    out.bold(e.name),
+                    e.host.targetUser,
+                    e.host.targetHost,
+                    e.host.targetPort,
+                    e.host.nice,
                 });
             }
         },
@@ -66,71 +76,79 @@ pub fn main(init: std.process.Init) !void {
                 return error.NoCommand;
             }
 
-            if (args.sequential) {
-                var it = cfg.value.hosts.map.iterator();
-                while (it.next()) |entry| {
-                    if (!config.matchesFilter(
-                        entry.key_ptr.*,
-                        args.filter,
-                        args.exclude,
-                    )) continue;
+            var tasks: std.ArrayList(HostTask) = .empty;
+            defer tasks.deinit(allocator);
 
-                    const task: HostTask = .{
-                        .gpa = allocator,
-                        .io = init.io,
-                        .out = &out,
-                        .subcommand = subcommand,
-                        .hostname = entry.key_ptr.*,
-                        .host = entry.value_ptr.*,
-                        .flake = args.flake,
-                        .environ_map = init.environ_map,
-                        .exec_args = args.exec_args,
-                        .reboot = args.reboot,
-                        .show_progress = true,
-                    };
-                    task.run();
+            var it = cfg.value.hosts.map.iterator();
+            while (it.next()) |entry| {
+                if (!config.matchesFilter(
+                    entry.key_ptr.*,
+                    args.filter,
+                    args.exclude,
+                )) continue;
+
+                try tasks.append(allocator, .{
+                    .gpa = allocator,
+                    .io = init.io,
+                    .out = &out,
+                    .subcommand = subcommand,
+                    .hostname = entry.key_ptr.*,
+                    .host = entry.value_ptr.*,
+                    .flake = args.flake,
+                    .environ_map = init.environ_map,
+                    .exec_args = args.exec_args,
+                    .reboot = args.reboot,
+                    .show_progress = args.sequential,
+                });
+            }
+
+            if (args.sequential) {
+                if (subcommand == .apply)
+                    std.mem.sort(HostTask, tasks.items, {}, HostTask.higherNice);
+                for (tasks.items) |*task| task.run();
+            } else if (subcommand == .apply) {
+                // build everything in parallel, then copy and activate in nice tiers
+                try spawnJoin(HostTask.runBuildStore, allocator, tasks.items);
+
+                // stable descending sort by nice groups the tiers into adjacent
+                // runs while preserving insertion order within each tier
+                std.mem.sort(HostTask, tasks.items, {}, HostTask.higherNice);
+                var start: usize = 0;
+                while (start < tasks.items.len) {
+                    const nice = tasks.items[start].host.nice;
+                    var end = start;
+                    while (end < tasks.items.len and tasks.items[end].host.nice == nice) end += 1;
+                    try spawnJoin(HostTask.runDeploy, allocator, tasks.items[start..end]);
+                    start = end;
                 }
             } else {
-                var tasks: std.ArrayList(HostTask) = .empty;
-                defer tasks.deinit(allocator);
-
-                var it = cfg.value.hosts.map.iterator();
-                while (it.next()) |entry| {
-                    if (!config.matchesFilter(
-                        entry.key_ptr.*,
-                        args.filter,
-                        args.exclude,
-                    )) continue;
-
-                    try tasks.append(allocator, .{
-                        .gpa = allocator,
-                        .io = init.io,
-                        .out = &out,
-                        .subcommand = subcommand,
-                        .hostname = entry.key_ptr.*,
-                        .host = entry.value_ptr.*,
-                        .flake = args.flake,
-                        .environ_map = init.environ_map,
-                        .exec_args = args.exec_args,
-                        .reboot = args.reboot,
-                        .show_progress = false,
-                    });
-                }
-
-                // Finalise the slice before spawning so realloc can't invalidate pointers.
-                var threads: std.ArrayList(std.Thread) = .empty;
-                defer threads.deinit(allocator);
-                for (tasks.items) |*task| {
-                    try threads.append(allocator, try std.Thread.spawn(
-                        .{},
-                        HostTask.run,
-                        .{task},
-                    ));
-                }
-                for (threads.items) |thread| thread.join();
+                try spawnJoin(HostTask.run, allocator, tasks.items);
             }
         },
     }
+}
+
+const EvalEntry = struct {
+    name: []const u8,
+    host: config.HostConfig,
+    fn higherNice(_: void, a: EvalEntry, b: EvalEntry) bool {
+        return a.host.nice > b.host.nice;
+    }
+};
+
+/// Spawns one thread per task running `func`, then joins them all.
+/// The slice must be finalised before calling so realloc can't invalidate pointers.
+fn spawnJoin(
+    comptime func: fn (*HostTask) void,
+    gpa: std.mem.Allocator,
+    tasks: []HostTask,
+) !void {
+    var threads: std.ArrayList(std.Thread) = .empty;
+    defer threads.deinit(gpa);
+    for (tasks) |*task| {
+        try threads.append(gpa, try std.Thread.spawn(.{}, func, .{task}));
+    }
+    for (threads.items) |thread| thread.join();
 }
 
 const HostTask = struct {
@@ -145,8 +163,13 @@ const HostTask = struct {
     exec_args: []const []const u8,
     reboot: bool,
     show_progress: bool,
+    store_path: ?[]u8 = null,
 
-    fn run(self: *const HostTask) void {
+    fn higherNice(_: void, a: HostTask, b: HostTask) bool {
+        return a.host.nice > b.host.nice;
+    }
+
+    fn run(self: *HostTask) void {
         switch (self.subcommand) {
             .build => self.runBuild(),
             .apply => self.runApply(),
@@ -182,8 +205,17 @@ const HostTask = struct {
         self.gpa.free(path);
     }
 
-    fn runApply(self: *const HostTask) void {
-        const path = self.build() orelse return;
+    fn runBuildStore(self: *HostTask) void {
+        self.store_path = self.build();
+    }
+
+    fn runApply(self: *HostTask) void {
+        self.runBuildStore();
+        self.runDeploy();
+    }
+
+    fn runDeploy(self: *HostTask) void {
+        const path = self.store_path orelse return;
         defer self.gpa.free(path);
         const store_path = std.mem.trimEnd(u8, path, "\n");
 
