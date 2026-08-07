@@ -203,9 +203,12 @@ fn waitForReboot(
     out: *output.Output,
     base: SshBase,
 ) !void {
+    const max_attempts = 40;
+
     out.print("waiting for host to come back online...\n", .{});
     try std.Io.sleep(io, Duration.fromSeconds(10), .real);
-    while (true) {
+    var attempt: usize = 0;
+    while (attempt < max_attempts) : (attempt += 1) {
         // Extra `-o` options must precede the host, so this argv is built
         // by hand rather than via `base.argv` (which puts the host last).
         const r = try std.process.run(
@@ -232,4 +235,6 @@ fn waitForReboot(
         if (r.term == .exited and r.term.exited == 0) return;
         try std.Io.sleep(io, Duration.fromSeconds(3), .real);
     }
+    out.errPrint("host did not come back online within timeout\n", .{});
+    return error.RebootTimeout;
 }
