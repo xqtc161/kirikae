@@ -43,7 +43,7 @@ pub fn copyToHost(
 
     var env = try parent_env.clone(gpa);
     defer env.deinit();
-    const ssh_opts = try std.fmt.allocPrint(gpa, "-p {d}", .{host.targetPort});
+    const ssh_opts = try std.fmt.allocPrint(gpa, "-p {d} -o StrictHostKeyChecking=accept-new", .{host.targetPort});
     defer gpa.free(ssh_opts);
     try env.put("NIX_SSHOPTS", ssh_opts);
 
