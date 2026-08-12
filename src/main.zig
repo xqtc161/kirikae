@@ -95,6 +95,7 @@ pub fn main(init: std.process.Init) !void {
                     .hostname = entry.key_ptr.*,
                     .host = entry.value_ptr.*,
                     .flake = args.flake,
+                    .builders = cfg.value.builders,
                     .environ_map = init.environ_map,
                     .exec_args = args.exec_args,
                     .reboot = args.reboot,
@@ -163,6 +164,7 @@ const HostTask = struct {
     hostname: []const u8,
     host: config.HostConfig,
     flake: []const u8,
+    builders: ?[]const []const u8,
     environ_map: *const std.process.Environ.Map,
     exec_args: []const []const u8,
     reboot: bool,
@@ -195,6 +197,7 @@ const HostTask = struct {
             self.out,
             self.flake,
             self.hostname,
+            self.builders,
             self.show_progress,
         ) catch |err| {
             self.out.errPrint("[{f}] build failed: {s}\n", .{

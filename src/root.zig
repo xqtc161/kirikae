@@ -6,6 +6,11 @@
 //! ## Flake schema
 //!
 //! ```nix
+//! kirikae.builders = [
+//!   "ssh://nix@builder-a x86_64-linux"
+//!   "ssh://nix@builder-b aarch64-linux"
+//! ];
+//!
 //! kirikae.hosts.myhost = {
 //!   targetHost = "10.0.0.1";   # required
 //!   targetUser = "root";       # optional, default "root"
@@ -16,6 +21,9 @@
 //!
 //! Every key in `kirikae.hosts` must have a matching `nixosConfigurations.<key>`
 //! in the same flake.
+//! Each `kirikae.builders` item is one Nix build machine specification. Omit
+//! the field to use the builders from `nix.conf`, or set it to `[ ]` to disable
+//! configured remote builders for Kirikae builds.
 //!
 //! ## Usage
 //!

@@ -148,6 +148,7 @@ pub fn buildSystem(
     out: *output.Output,
     flake_ref: []const u8,
     hostname: []const u8,
+    builders: ?[]const []const u8,
     show_progress: bool,
 ) ![]u8 {
     const installable = try std.fmt.allocPrint(
@@ -156,17 +157,26 @@ pub fn buildSystem(
         .{ flake_ref, hostname },
     );
     defer gpa.free(installable);
+    const builders_option = if (builders) |value| try std.mem.join(gpa, " ; ", value) else null;
+    defer if (builders_option) |value| gpa.free(value);
+
+    var argv: [10][]const u8 = undefined;
+    argv[0..7].* = .{
+        "nix",
+        "build",
+        installable,
+        "--no-link",
+        "--print-out-paths",
+        "--log-format",
+        "internal-json",
+    };
+    const argv_len: usize = if (builders_option) |value| len: {
+        argv[7..10].* = .{ "--option", "builders", value };
+        break :len 10;
+    } else 7;
 
     var child = try std.process.spawn(io, .{
-        .argv = &.{
-            "nix",
-            "build",
-            installable,
-            "--no-link",
-            "--print-out-paths",
-            "--log-format",
-            "internal-json",
-        },
+        .argv = argv[0..argv_len],
         .stdin = .ignore,
         .stdout = .pipe,
         .stderr = .pipe,

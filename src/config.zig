@@ -10,6 +10,7 @@ pub const HostConfig = struct {
 };
 
 pub const Config = struct {
+    builders: ?[]const []const u8 = null,
     hosts: std.json.ArrayHashMap(HostConfig),
 };
 

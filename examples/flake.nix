@@ -31,6 +31,7 @@
       # expose systems as hydra jobs for pre-building.
       hydraJobs = builtins.mapAttrs (_: cfg: cfg.config.system.build.toplevel) self.nixosConfigurations;
 
+      kirikae.builders = [ ];
       kirikae.hosts = {
         vm-proxy = {
           targetHost = "127.0.0.1";

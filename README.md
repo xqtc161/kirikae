@@ -31,6 +31,10 @@ Example flake setup:
           modules = [ ./hosts/example2.nix ];
         };        
       };
+      kirikae.builders = [
+        "ssh://nix@builder-a x86_64-linux"
+        "ssh://nix@builder-b aarch64-linux"
+      ];
       kirikae.hosts = {
         example = {
           targetHost = "[::1]";
@@ -47,6 +51,11 @@ Example flake setup:
     };
 }
 ```
+
+Each `kirikae.builders` item is one Nix build machine specification. Kirikae
+passes multiple entries to `nix build` as a semicolon-separated `builders`
+option. Omit `kirikae.builders` to keep the builders from `nix.conf`, or set it
+to `[ ]` to disable configured remote builders for Kirikae builds.
 
 With this you can run:
 
