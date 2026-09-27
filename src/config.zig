@@ -9,10 +9,43 @@ pub const HostConfig = struct {
     nice: i64 = 0,
 };
 
+pub const SelectedHost = struct {
+    name: []const u8,
+    config: HostConfig,
+
+    pub fn higherNice(_: void, a: SelectedHost, b: SelectedHost) bool {
+        return a.config.nice > b.config.nice;
+    }
+};
+
 pub const Config = struct {
     builders: ?[]const []const u8 = null,
     hosts: std.json.ArrayHashMap(HostConfig),
 };
+
+/// Caller owns the returned array.
+/// Strings borrow from cfg which must outlive selected hosts
+pub fn selectHosts(
+    gpa: std.mem.Allocator,
+    cfg: *const Config,
+    include: ?[]const u8,
+    exclude: ?[]const u8,
+) ![]SelectedHost {
+    var hosts: std.ArrayList(SelectedHost) = .empty;
+    errdefer hosts.deinit(gpa);
+
+    var it = cfg.hosts.map.iterator();
+    while (it.next()) |entry| {
+        if (!matchesFilter(entry.key_ptr.*, include, exclude)) continue;
+
+        try hosts.append(gpa, .{
+            .name = entry.key_ptr.*,
+            .config = entry.value_ptr.*,
+        });
+    }
+
+    return hosts.toOwnedSlice(gpa);
+}
 
 /// Evaluates `<flake_ref>#kirikae` and parses the result into a `Config`.
 /// Call `.deinit()` on the returned value to free all memory.
