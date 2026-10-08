@@ -11,7 +11,7 @@ const msg_width = 100;
 pub const Display = struct {
     out: *output.Output,
     msg_ring: [max_msgs][msg_width]u8 = undefined,
-    msg_ring_len: [max_msgs]usize = .{0} ** max_msgs,
+    msg_ring_len: [max_msgs]usize = @splat(0),
     msg_head: usize = 0,
     msg_full: bool = false,
     rendered: bool = false,
